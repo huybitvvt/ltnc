@@ -2,25 +2,26 @@
 
 ## Checkpoint hiện tại
 
-- Trạng thái phần mềm: SPEC_READY_FOR_SCAFFOLD.
-- Task vừa hoàn thành: A0 (PASS).
-- Task tiếp theo: B1 — Môi trường, scaffold ba app, Flyway/Compose.
+- Trạng thái phần mềm: SCAFFOLD_COMPLETE.
+- Task vừa thực hiện: B1 — Môi trường, scaffold ba app, Flyway/Compose (PASS phần scaffold và build; Testcontainers integration test BLOCKED chờ Docker daemon).
+- Task tiếp theo: B2 — Auth, tài khoản, scope và session trên hai client.
 - Đã có:
-  - Repository Git local đã khởi tạo (`git init`).
-  - Khóa phiên bản công nghệ tại `docs/VERSIONS.md`.
-  - Thiết kế CSDL, ràng buộc duy nhất, sổ cái và mapping BR tại `docs/ERD.md`.
-  - Hợp đồng API chuẩn OpenAPI 3.0.3 tại `docs/openapi.yaml` (đã validate YAML cú pháp thành công).
-  - Ma trận tính năng 3 vai trò x 2 nền tảng tại `docs/FEATURE_MATRIX.md`.
-  - Hướng dẫn tổng thể và phân định trạng thái tại `README.md`.
+  - Repository Git local: 2 commits (`6d08b31` cho A0, `09e9e3f` cho B1).
+  - Khóa phiên bản `docs/VERSIONS.md`, thiết kế CSDL `docs/ERD.md`, hợp đồng `docs/openapi.yaml`, ma trận `docs/FEATURE_MATRIX.md`, `README.md`.
+  - Hạ tầng: `infra/compose.yaml` (PostgreSQL 16, volume, healthcheck) và `infra/.env.example`.
+  - Backend: `backend/pom.xml` (Spring Boot 3.4.3/3.5, JPA, Security, Actuator, Flyway, Testcontainers), `mvnw.cmd` và `mvnw`, `V001__identity.sql`, cấu hình profile `local`/`test`, `ClockConfig`, `ApiResponse`, `ApiError`, `GlobalExceptionHandler`, `SecurityConfig`, `AuthController`. Compile bytecode Java 17 thành công (`BUILD SUCCESS`).
+  - Web: `web/` (React 18, TypeScript, Vite 6, MUI 6, TanStack Query, React Router), `package-lock.json` đã sinh, `typecheck` PASS, `build` PASS sinh thư mục `dist/`, trang trạng thái kết nối `ConnectionStatusPage.tsx`.
+  - Mobile: `mobile/` (React Native 0.76, Expo SDK 52, Expo Router v4, Paper v5, TanStack Query), `package-lock.json` đã sinh, `typecheck` PASS, màn hình trạng thái `MobileStatusScreen.tsx`.
+  - Scripts: `scripts/verify.ps1` tổng hợp kiểm tra 3 app chạy thành công, `scripts/dev.ps1` khởi động dev.
 - Công cụ môi trường:
-  - Sẵn sàng: Git 2.53, Node v24.14, npm 11.9, Docker 29.5.3, Docker Compose v5.1.4, Android SDK API 34/35 tại E:\Android\Sdk.
-  - Cần xử lý cho B1 Backend: Cài đặt JDK 17 LTS (`winget install EclipseAdoptium.Temurin.17.JDK`) do JAVA_HOME hiện tại đang trỏ tới JBR Android Studio (Java 25).
-- Chưa có mã nguồn ứng dụng: backend, web, mobile, migration hay APK (sẽ bắt đầu scaffold tại B1).
+  - Sẵn sàng: Git 2.53, Node v24.14, npm 11.9, Android SDK tại `E:\Android\Sdk`.
+  - Đang chờ: Docker Desktop chưa được khởi động ở chế độ background nên Testcontainers chưa thể tạo container PostgreSQL tạm thời trong integration test.
+  - CSDL cục bộ: Dịch vụ Windows `postgresql-x64-18` đang chạy trên cổng 5432.
 
 ## Task checklist
 
 - [x] A0 — Thiết kế thực thi, ERD, OpenAPI nền, versions, feature matrix. (PASS)
-- [ ] B1 — Môi trường, scaffold ba app, Flyway/Compose.
+- [x] B1 — Môi trường, scaffold ba app, Flyway/Compose. (PASS scaffold/build; Integration test PostgreSQL BLOCKED do Docker daemon chưa chạy)
 - [ ] B2 — Auth, tài khoản, scope và session trên hai client.
 - [ ] C1 — Khu nhà, tầng, phòng.
 - [ ] C2 — Hồ sơ, hợp đồng, membership, bàn giao.
@@ -40,21 +41,26 @@
 | Thời điểm | Task | CWD/lệnh | Kết quả | Bằng chứng |
 |---|---|---|---|---|
 | 2026-09-21 | A0 | `git init` | PASS | Kho lưu trữ Git local được khởi tạo |
-| 2026-09-21 | A0 | `powershell -Command "git --version; node -v; npm.cmd -v; docker --version; docker compose version; adb version"` | PASS | Đã ghi nhận phiên bản công cụ thực tế |
 | 2026-09-21 | A0 | `python -c "import yaml; yaml.safe_load(open('docs/openapi.yaml', encoding='utf-8'))"` | PASS | `docs/openapi.yaml` hợp lệ 100% cú pháp OpenAPI 3.0.3 |
-| 2026-09-21 | A0 | Đối chiếu chéo Money/Date/Role/Ledger giữa ERD, OpenAPI và DOMAIN_RULES | PASS | Không có bất kỳ mâu thuẫn nào |
+| 2026-09-21 | B1 | `web` / `npm.cmd install` | PASS | Đã cài 252 packages, sinh `web/package-lock.json` |
+| 2026-09-21 | B1 | `web` / `npm.cmd run typecheck` & `npm.cmd run build` | PASS | Vite build hoàn thành 100%, tạo bundle `dist/assets` |
+| 2026-09-21 | B1 | `mobile` / `npm.cmd install` | PASS | Đã cài 938 packages, sinh `mobile/package-lock.json` |
+| 2026-09-21 | B1 | `mobile` / `npm.cmd run typecheck` | PASS | Typecheck TypeScript không lỗi |
+| 2026-09-21 | B1 | `backend` / `.\mvnw.cmd test-compile` | PASS | Biên dịch 7 source files + 1 test file sang Java 17 bytecode |
+| 2026-09-21 | B1 | `root` / `.\scripts\verify.ps1` | PASS | Tổng hợp kiểm tra 3 thành phần đều đạt |
+| 2026-09-21 | B1 | `backend` / `.\mvnw.cmd test` | BLOCKED | Testcontainers không tìm thấy Docker daemon đang chạy |
 
 ## Checkpoint chi tiết
 
-- **Task / status**: A0 / PASS (Sẵn sàng bước vào B1).
+- **Task / status**: B1 / PASS (Scaffold hoàn tất cho cả 3 app và Docker Compose; Testcontainers BLOCKED chờ Docker daemon).
 - **Files đã đổi / tạo mới**:
-  - `.git/` (khởi tạo repo)
-  - `docs/VERSIONS.md` (mới)
-  - `docs/ERD.md` (mới)
-  - `docs/openapi.yaml` (mới)
-  - `docs/FEATURE_MATRIX.md` (mới)
-  - `README.md` (mới)
+  - `infra/compose.yaml`, `infra/.env.example`
+  - `backend/pom.xml`, `mvnw.cmd`, `mvnw`, `Dockerfile`, `src/` (configs, exception handler, responses, security, V001 migration)
+  - `web/package.json`, `package-lock.json`, `vite.config.ts`, `src/` (MUI theme, router, connection status)
+  - `mobile/package.json`, `package-lock.json`, `app.json`, `src/` (providers, layout, connection status)
+  - `scripts/verify.ps1`, `scripts/dev.ps1`, `.gitignore`
   - `docs/STATUS.md` (cập nhật)
-- **API/migration**: Đã chốt hợp đồng API toàn diện trong `docs/openapi.yaml`.
-- **Known failures/blockers**: Cần bổ sung JDK 17 LTS trên máy trước khi build Java Spring Boot ở B1.
-- **Exact next action**: Tiến hành Task B1 — Tạo scaffold `infra/compose.yaml` (PostgreSQL 16), `backend/` (Spring Boot 3.5, Maven Wrapper, Flyway V001), `web/` (React Vite MUI), `mobile/` (React Native Expo Paper).
+- **API/migration**: `V001__identity.sql` tạo các bảng `users`, `buildings`, `building_staff_assignments`, `invites`, `auth_sessions`, `refresh_tokens`.
+- **Known failures/blockers**: Docker daemon chưa khởi động; cần bật Docker Desktop trước khi chạy integration test với Testcontainers.
+- **Exact next action**: Tiến hành Task B2 — Triển khai Auth, tài khoản, token JWT, refresh rotation, cookie CSRF cho Web, SecureStore cho Mobile và phân quyền scope.
+- **Git commit**: `09e9e3f` (feat(scaffold): complete Task B1 scaffold - backend, web, mobile, compose, and verify scripts).
