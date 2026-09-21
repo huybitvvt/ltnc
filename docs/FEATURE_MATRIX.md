@@ -50,14 +50,14 @@ Trạng thái hợp lệ cho các cột: `NOT_STARTED`, `IN_PROGRESS`, `PASS`, `
 | **MET-06** | Đơn giá & Đo lường | Xem chỉ số và ảnh đồng hồ trên hóa đơn | TENANT | PASS | PASS | PASS | PASS | `MeteringController.getRoomReadings`, hiển thị trên web & app |
 | **MET-07** | Đơn giá & Đo lường | Đánh giá cảnh báo tiêu thụ bất thường (3 kỳ)| OWNER | PASS | PASS | PASS | PASS | `MeteringServiceTest.testEvaluateConsumption_OverThreshold_ReturnsWarning` (BR-141), snapshot so sánh median |
 | **MET-08** | Đơn giá & Đo lường | Xác nhận cảnh báo chỉ số đúng có lý do | STAFF | PASS | PASS | PASS | PASS | `MeteringServiceTest.testAcknowledgeAlert_Success` (BR-145), dialog xác nhận giải trình trên web & app |
-| **INV-01** | Hóa đơn & Tính tiền | Xem trước & Tính toán hóa đơn nháp | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **INV-02** | Hóa đơn & Tính tiền | Xem trước & Tính toán hóa đơn nháp | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **INV-03** | Hóa đơn & Tính tiền | Phát hành hóa đơn (chốt snapshot bất biến) | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **INV-04** | Hóa đơn & Tính tiền | Phát hành hóa đơn trong phạm vi | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **INV-05** | Hóa đơn & Tính tiền | Xem hóa đơn đã phát hành & chi tiết dòng | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **INV-06** | Hóa đơn & Tính tiền | Điều chỉnh tăng/giảm giá trị hóa đơn | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **INV-07** | Hóa đơn & Tính tiền | Điều chỉnh tăng/giảm giá trị hóa đơn | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **INV-08** | Hóa đơn & Tính tiền | Thêm ghi chú đính chính mô tả hóa đơn | OWNER/STAFF| NOT_STARTED| NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **INV-01** | Hóa đơn & Tính tiền | Xem trước & Tính toán hóa đơn nháp | OWNER | PASS | PASS | PASS | PASS | `BillingServiceTest.testCalculateRoomRent_ProratedDays_EX01`, `BillingService.previewInvoice`, `InvoicesPage`, `InvoicesScreen` |
+| **INV-02** | Hóa đơn & Tính tiền | Xem trước & Tính toán hóa đơn nháp | STAFF | PASS | PASS | PASS | PASS | `BillingService.previewInvoice`, `BillingService.createOrUpdateDraftInvoice` |
+| **INV-03** | Hóa đơn & Tính tiền | Phát hành hóa đơn (chốt snapshot bất biến) | OWNER | PASS | PASS | PASS | PASS | `BillingServiceTest.testIssueInvoice_LowerEndReading_ThrowsException_EX07`, `BillingService.issueInvoice`, snapshot bất biến (BR-078) |
+| **INV-04** | Hóa đơn & Tính tiền | Phát hành hóa đơn trong phạm vi | STAFF | PASS | PASS | PASS | PASS | `BillingService.issueInvoice`, kiểm tra chặn khi cảnh báo chưa giải trình (BR-145) |
+| **INV-05** | Hóa đơn & Tính tiền | Xem hóa đơn đã phát hành & chi tiết dòng | TENANT | PASS | PASS | PASS | PASS | `/api/v1/invoices`, `InvoicesPage` (web), `InvoicesScreen` (mobile) |
+| **INV-06** | Hóa đơn & Tính tiền | Điều chỉnh tăng/giảm giá trị hóa đơn | OWNER | PASS | PASS | PASS | PASS | `BillingServiceTest.testAdjustInvoice_NegativeEffectiveDue_ThrowsException_EX12`, `testAdjustInvoice_Success` (BR-081) |
+| **INV-07** | Hóa đơn & Tính tiền | Điều chỉnh tăng/giảm giá trị hóa đơn | STAFF | PASS | PASS | PASS | PASS | `BillingService.adjustInvoice`, dialog điều chỉnh có audit trên Web & Mobile |
+| **INV-08** | Hóa đơn & Tính tiền | Thêm ghi chú đính chính mô tả hóa đơn | OWNER/STAFF| PASS | PASS | PASS | PASS | `BillingService.addInvoiceNote`, dialog ghi chú đính chính trên Web & Mobile |
 | **PAY-01** | Thu tiền & Sổ cái | Ghi nhận thu tiền hóa đơn | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
 | **PAY-02** | Thu tiền & Sổ cái | Ghi nhận thu tiền hóa đơn trong phạm vi | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
 | **PAY-03** | Thu tiền & Sổ cái | Sửa khoản thu nhập nhầm (PAYMENT_CORRECTION)| OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |

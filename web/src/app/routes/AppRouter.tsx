@@ -8,6 +8,7 @@ import { UsersPage } from '@/features/users/UsersPage';
 import { BuildingsPage } from '@/features/property/BuildingsPage';
 import { ContractsPage } from '@/features/contracts/ContractsPage';
 import { MeteringPage } from '@/features/metering/MeteringPage';
+import { InvoicesPage } from '@/features/invoices/InvoicesPage';
 import { ConnectionStatusPage } from '@/features/status/ConnectionStatusPage';
 import { AppLayout } from '@/shared/components/AppLayout';
 import { ProtectedRoute } from '@/shared/components/ProtectedRoute';
@@ -88,6 +89,8 @@ export const AppRouter: React.FC = () => {
             }
           />
           <Route path="/meters" element={<Navigate to="/metering" replace />} />
+
+          <Route path="/invoices" element={<InvoicesPage />} />
 
           <Route
             path="/users"

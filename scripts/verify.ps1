@@ -55,8 +55,8 @@ if ($backendCompileExit -ne 0) {
     Write-Host "[+] Backend compile PASSED!" -ForegroundColor Green
 }
 
-Write-Host "`n[3b/3] Chạy Unit Tests Backend (Auth + User + Property + Tenancy + Pricing + Metering)..." -ForegroundColor Yellow
-cmd /c .\mvnw.cmd test "-Dtest=AuthServiceTest,UserServiceTest,PropertyServiceTest,TenancyServiceTest,PricingServiceTest,MeteringServiceTest"
+Write-Host "`n[3b/3] Chạy Unit Tests Backend (Auth + User + Property + Tenancy + Pricing + Metering + Billing)..." -ForegroundColor Yellow
+cmd /c .\mvnw.cmd test "-Dtest=AuthServiceTest,UserServiceTest,PropertyServiceTest,TenancyServiceTest,PricingServiceTest,MeteringServiceTest,BillingServiceTest"
 $backendTestExit = $LASTEXITCODE
 if ($backendTestExit -ne 0) {
     Write-Host "[-] Backend unit tests FAILED!" -ForegroundColor Red

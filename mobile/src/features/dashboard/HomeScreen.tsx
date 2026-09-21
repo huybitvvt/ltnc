@@ -8,6 +8,7 @@ interface HomeScreenProps {
   onNavigateToProperty?: () => void;
   onNavigateToContracts?: () => void;
   onNavigateToMetering?: () => void;
+  onNavigateToInvoices?: () => void;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
@@ -15,6 +16,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onNavigateToProperty,
   onNavigateToContracts,
   onNavigateToMetering,
+  onNavigateToInvoices,
 }) => {
   const theme = useTheme();
   const { user, logout, changePassword } = useMobileAuth();
@@ -118,6 +120,15 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
                 Ghi chỉ số đồng hồ điện nước và cảnh báo tiêu thụ
               </Text>
             </TouchableOpacity>
+            <Divider />
+            <TouchableOpacity style={styles.menuItem} onPress={onNavigateToInvoices}>
+              <Text variant="bodyLarge" style={styles.menuItemText}>
+                📄 Hóa đơn & Tiền phòng
+              </Text>
+              <Text variant="bodySmall" style={styles.menuItemSub}>
+                Lập hóa đơn nháp, phát hành, điều chỉnh và công nợ
+              </Text>
+            </TouchableOpacity>
           </>
         ) : (
           <>
@@ -130,14 +141,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               </Text>
             </TouchableOpacity>
             <Divider />
-            <View style={styles.menuItem}>
+            <TouchableOpacity style={styles.menuItem} onPress={onNavigateToInvoices}>
               <Text variant="bodyLarge" style={styles.menuItemText}>
                 📄 Hóa đơn & Thanh toán
               </Text>
               <Text variant="bodySmall" style={styles.menuItemSub}>
                 Xem chi tiết tiền phòng, điện nước và lịch sử thanh toán
               </Text>
-            </View>
+            </TouchableOpacity>
           </>
         )}
         <Divider />

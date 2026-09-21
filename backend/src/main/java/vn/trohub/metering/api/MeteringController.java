@@ -5,8 +5,8 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
-import vn.trohub.auth.domain.UserPrincipal;
 import vn.trohub.common.api.ApiResponse;
+import vn.trohub.common.security.UserPrincipal;
 import vn.trohub.metering.api.dto.MeteringDtos.*;
 import vn.trohub.metering.application.MeteringService;
 import vn.trohub.metering.domain.ConsumptionAlert;
@@ -83,7 +83,7 @@ public class MeteringController {
                 r.getId(),
                 r.getMeter().getId(),
                 r.getMeter().getType(),
-                r.getMeter().getRoom().getCode(),
+                r.getMeter().getRoom().getRoomNumber(),
                 r.getReadingDate(),
                 r.getValue(),
                 r.getKind(),

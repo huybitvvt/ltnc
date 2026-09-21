@@ -1,0 +1,13 @@
+package vn.trohub.billing.domain;
+
+public enum FinancialAction {
+    INVOICE_ISSUE,
+    INVOICE_ADJUST,
+    PAYMENT,
+    PAYMENT_CORRECTION,
+    REFUND,
+    CREDIT_TRANSFER,
+    DEPOSIT_RECEIPT,
+    DEPOSIT_OFFSET,
+    DEPOSIT_DEDUCTION
+}

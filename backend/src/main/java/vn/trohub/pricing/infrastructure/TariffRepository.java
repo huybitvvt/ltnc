@@ -20,4 +20,7 @@ public interface TariffRepository extends JpaRepository<Tariff, UUID> {
     // BR-067: Kỳ dùng phiên bản giá có tháng hiệu lực gần nhất không sau kỳ đó
     List<Tariff> findByBuildingIdAndServiceIdAndEffectiveMonthLessThanEqualOrderByEffectiveMonthDesc(
             UUID buildingId, UUID serviceId, String billingMonth);
+
+    List<Tariff> findByBuildingIdAndEffectiveMonthLessThanEqualOrderByEffectiveMonthDesc(
+            UUID buildingId, String billingMonth);
 }
