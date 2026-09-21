@@ -54,6 +54,16 @@ if ($backendCompileExit -ne 0) {
 } else {
     Write-Host "[+] Backend compile PASSED!" -ForegroundColor Green
 }
+
+Write-Host "`n[3b/3] Chạy Unit Tests Backend (Auth + User)..." -ForegroundColor Yellow
+cmd /c .\mvnw.cmd test "-Dtest=AuthServiceTest,UserServiceTest"
+$backendTestExit = $LASTEXITCODE
+if ($backendTestExit -ne 0) {
+    Write-Host "[-] Backend unit tests FAILED!" -ForegroundColor Red
+    $allPass = $false
+} else {
+    Write-Host "[+] Backend unit tests PASSED!" -ForegroundColor Green
+}
 Pop-Location
 
 Write-Host "`n==========================================" -ForegroundColor Cyan

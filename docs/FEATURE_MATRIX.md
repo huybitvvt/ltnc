@@ -8,15 +8,15 @@ Trạng thái hợp lệ cho các cột: `NOT_STARTED`, `IN_PROGRESS`, `PASS`, `
 
 | ID | Nhóm nghiệp vụ | Chức năng (Capability) | Vai trò | API | Web | Mobile | Test | Evidence |
 |---|---|---|---|---|---|---|---|---|
-| **AUTH-01** | Tài khoản & Xác thực | Đăng nhập bằng tài khoản & mật khẩu | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **AUTH-02** | Tài khoản & Xác thực | Đăng nhập bằng tài khoản & mật khẩu | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **AUTH-03** | Tài khoản & Xác thực | Đăng nhập bằng tài khoản & mật khẩu | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **AUTH-04** | Tài khoản & Xác thực | Kích hoạt tài khoản qua mã mời | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **AUTH-05** | Tài khoản & Xác thực | Đổi mật khẩu & Reset mật khẩu | ALL | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **AUTH-06** | Tài khoản & Xác thực | Xoay vòng phiên & Refresh token | ALL | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **AUTH-07** | Tài khoản & Xác thực | Đăng xuất & Thu hồi phiên làm việc | ALL | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **USER-01** | Quản trị người dùng | Quản lý tài khoản nhân viên (tạo/khóa) | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **USER-02** | Quản trị người dùng | Gán và cập nhật phân công tòa nhà cho STAFF | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **AUTH-01** | Tài khoản & Xác thực | Đăng nhập bằng tài khoản & mật khẩu | OWNER | PASS | PASS | PASS | PASS | `AuthServiceTest.testLogin_Success`, `web/src/features/auth/LoginPage`, `mobile/src/features/auth/LoginScreen` |
+| **AUTH-02** | Tài khoản & Xác thực | Đăng nhập bằng tài khoản & mật khẩu | STAFF | PASS | PASS | PASS | PASS | `AuthServiceTest.testLogin_Success`, `web/src/features/auth/LoginPage`, `mobile/src/features/auth/LoginScreen` |
+| **AUTH-03** | Tài khoản & Xác thực | Đăng nhập bằng tài khoản & mật khẩu | TENANT | PASS | PASS | PASS | PASS | `AuthServiceTest.testLogin_Success`, `web/src/features/auth/LoginPage`, `mobile/src/features/auth/LoginScreen` |
+| **AUTH-04** | Tài khoản & Xác thực | Kích hoạt tài khoản qua mã mời | TENANT | PASS | PASS | PASS | PASS | `AuthServiceTest.testActivateAccount_ExpiredInvite`, `web/src/features/auth/ActivatePage`, `mobile/src/features/auth/ActivateScreen` |
+| **AUTH-05** | Tài khoản & Xác thực | Đổi mật khẩu & Reset mật khẩu | ALL | PASS | PASS | PASS | PASS | `AuthServiceTest.testChangePassword_RevokesAllUserSessions`, `ChangePasswordDialog`, `ChangePasswordModal` |
+| **AUTH-06** | Tài khoản & Xác thực | Xoay vòng phiên & Refresh token | ALL | PASS | PASS | PASS | PASS | `AuthServiceTest.testRefreshToken_Rotation`, `AuthServiceTest.testRefreshToken_ReuseDetection`, single-flight axios interceptor |
+| **AUTH-07** | Tài khoản & Xác thực | Đăng xuất & Thu hồi phiên làm việc | ALL | PASS | PASS | PASS | PASS | `/api/v1/auth/logout`, `AuthContext.logout`, revoke session |
+| **USER-01** | Quản trị người dùng | Quản lý tài khoản nhân viên (tạo/khóa) | OWNER | PASS | PASS | PASS | PASS | `UserServiceTest.testCreateStaff_Success`, `UserServiceTest.testUpdateUserStatus_Disable_RevokesSessions`, `web/src/features/users/UsersPage` |
+| **USER-02** | Quản trị người dùng | Gán và cập nhật phân công tòa nhà cho STAFF | OWNER | PASS | PASS | PASS | PASS | `UserService.updateUserAssignments`, `BuildingStaffAssignmentRepository` |
 | **PROP-01** | Bất động sản | Quản lý tòa nhà (Thêm/Sửa/Trạng thái) | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
 | **PROP-02** | Bất động sản | Xem danh sách tòa nhà trong phạm vi phân công | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
 | **PROP-03** | Bất động sản | Quản lý tầng của tòa nhà | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |

@@ -4,7 +4,11 @@ import { Text, Card, Button, ActivityIndicator, Chip } from 'react-native-paper'
 import { useQuery } from '@tanstack/react-query';
 import axios from 'axios';
 
-export const MobileStatusScreen: React.FC = () => {
+interface MobileStatusScreenProps {
+  onBack?: () => void;
+}
+
+export const MobileStatusScreen: React.FC<MobileStatusScreenProps> = ({ onBack }) => {
   const apiUrl = process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:8080/api/v1';
 
   const { data, error, isLoading, refetch, isFetching } = useQuery({
@@ -56,6 +60,16 @@ export const MobileStatusScreen: React.FC = () => {
           >
             Thử lại kết nối
           </Button>
+
+          {onBack && (
+            <Button
+              mode="text"
+              onPress={onBack}
+              style={{ marginTop: 8, width: '100%' }}
+            >
+              Quay lại màn hình chính
+            </Button>
+          )}
         </Card.Content>
       </Card>
     </View>
