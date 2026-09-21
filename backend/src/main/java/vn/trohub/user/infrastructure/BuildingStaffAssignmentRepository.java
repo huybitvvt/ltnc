@@ -14,5 +14,7 @@ public interface BuildingStaffAssignmentRepository extends JpaRepository<Buildin
     @Query("SELECT bsa.building.id FROM BuildingStaffAssignment bsa WHERE bsa.user.id = :userId")
     List<UUID> findBuildingIdsByUserId(@Param("userId") UUID userId);
 
+    boolean existsByUserIdAndBuildingId(UUID userId, UUID buildingId);
+
     void deleteByUserId(UUID userId);
 }

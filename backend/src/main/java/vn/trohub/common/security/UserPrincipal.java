@@ -29,6 +29,10 @@ public class UserPrincipal implements UserDetails {
         this.assignedBuildingIds = assignedBuildingIds != null ? assignedBuildingIds : List.of();
     }
 
+    public UserPrincipal(UUID id, String login, UserRole role, boolean enabled) {
+        this(id, login, "", role, enabled, UUID.randomUUID(), List.of());
+    }
+
     public UUID getId() {
         return id;
     }

@@ -6,11 +6,12 @@ import { LoginScreen } from '@/features/auth/LoginScreen';
 import { ActivateScreen } from '@/features/auth/ActivateScreen';
 import { HomeScreen } from '@/features/dashboard/HomeScreen';
 import { MobileStatusScreen } from '@/features/status/MobileStatusScreen';
+import { PropertyScreen } from '@/features/property/PropertyScreen';
 
 export default function IndexScreen() {
   const { isAuthenticated, isLoading } = useMobileAuth();
   const [authView, setAuthView] = useState<'LOGIN' | 'ACTIVATE'>('LOGIN');
-  const [mainView, setMainView] = useState<'HOME' | 'STATUS'>('HOME');
+  const [mainView, setMainView] = useState<'HOME' | 'STATUS' | 'PROPERTY'>('HOME');
 
   if (isLoading) {
     return (
@@ -32,7 +33,16 @@ export default function IndexScreen() {
     return <MobileStatusScreen onBack={() => setMainView('HOME')} />;
   }
 
-  return <HomeScreen onNavigateToStatus={() => setMainView('STATUS')} />;
+  if (mainView === 'PROPERTY') {
+    return <PropertyScreen onBack={() => setMainView('HOME')} />;
+  }
+
+  return (
+    <HomeScreen
+      onNavigateToStatus={() => setMainView('STATUS')}
+      onNavigateToProperty={() => setMainView('PROPERTY')}
+    />
+  );
 }
 
 const styles = StyleSheet.create({

@@ -5,6 +5,7 @@ import { ActivatePage } from '@/features/auth/ActivatePage';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
 import { TenantPortalPage } from '@/features/tenant/TenantPortalPage';
 import { UsersPage } from '@/features/users/UsersPage';
+import { BuildingsPage } from '@/features/property/BuildingsPage';
 import { ConnectionStatusPage } from '@/features/status/ConnectionStatusPage';
 import { AppLayout } from '@/shared/components/AppLayout';
 import { ProtectedRoute } from '@/shared/components/ProtectedRoute';
@@ -54,6 +55,15 @@ export const AppRouter: React.FC = () => {
             element={
               <ProtectedRoute allowedRoles={['TENANT']}>
                 <TenantPortalPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/buildings"
+            element={
+              <ProtectedRoute allowedRoles={['OWNER', 'STAFF']}>
+                <BuildingsPage />
               </ProtectedRoute>
             }
           />

@@ -81,6 +81,10 @@ public class Building {
         return updatedAt;
     }
 
+    public void setUpdatedAt(Instant updatedAt) {
+        this.updatedAt = updatedAt;
+    }
+
     public Long getVersion() {
         return version;
     }

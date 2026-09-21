@@ -2,38 +2,33 @@
 
 ## Checkpoint hiện tại
 
-- Trạng thái phần mềm: AUTH_AND_USER_MANAGEMENT_COMPLETE.
-- Task vừa thực hiện: B2 — Auth, tài khoản, scope và session trên hai client (PASS: Backend API + Web React + Mobile Expo + 10 Unit Tests đạt 100%).
-- Task tiếp theo: C1 — Khu nhà, tầng, phòng (Property Module).
+- Trạng thái phần mềm: PROPERTY_MANAGEMENT_COMPLETE.
+- Task vừa thực hiện: C1 — Khu nhà, tầng, phòng (PASS: Migration V002 + Backend CRUD Scope + Web BuildingsPage + Mobile PropertyScreen + 17 Unit Tests đạt 100%).
+- Task tiếp theo: C2 — Hồ sơ khách thuê, hợp đồng, thành viên, cọc/bàn giao (Tenancy & Contract Module).
 - Đã có:
-  - Repository Git local: commits `6d08b31` (A0), `09e9e3f` (B1), `06d491e` (B1 Status).
+  - Repository Git local: commits `6d08b31` (A0), `09e9e3f` (B1), `06d491e` (B1 Status), `76e97b9` (B2 Auth).
   - Khóa phiên bản `docs/VERSIONS.md`, thiết kế CSDL `docs/ERD.md`, hợp đồng `docs/openapi.yaml`, ma trận `docs/FEATURE_MATRIX.md`, `README.md`.
   - Hạ tầng: `infra/compose.yaml` (PostgreSQL 16, volume, healthcheck) và `infra/.env.example`.
   - Backend:
-    - Domain/Infrastructure: `User`, `UserRole`, `UserRepository`, `Building`, `BuildingRepository`, `BuildingStaffAssignment`, `BuildingStaffAssignmentRepository`, `Invite`, `InvitePurpose`, `InviteRepository`, `AuthSession`, `AuthSessionRepository`, `RefreshToken`, `RefreshTokenRepository`.
-    - Application/Security: `AuthService`, `UserService`, `JwtTokenProvider`, `JwtAuthenticationFilter`, `UserPrincipal`, `SecurityUtils`, `SecurityConfig`.
-    - API Controllers & DTOs: `AuthController` (`/api/v1/auth/*`), `UserController` (`/api/v1/users/*`), `AuthDtos`, `UserDtos`.
-    - Unit Tests: `AuthServiceTest` (7 ca kiểm thử đăng nhập, token rotation, reuse detection thu hồi token family, invite hết hạn 24h, đổi pass thu hồi phiên), `UserServiceTest` (3 ca phân quyền staff, toggle status thu hồi phiên, cấp lại invite). Kết quả 10/10 PASS!
+    - Domain/Infrastructure: `Building`, `Floor`, `Room`, `RoomStatus` (`VACANT`, `RENTED`, `DEPOSIT_RESERVED`, `MAINTENANCE`), `BuildingRepository`, `FloorRepository`, `RoomRepository`, `BuildingStaffAssignmentRepository`.
+    - Application/Security: `PropertyService` (kiểm tra phân công tòa nhà cho STAFF, OWNER toàn quyền, tính toán số phòng trống/tổng số phòng, quản lý tầng, tạo phòng với tiền tệ `BigDecimal`, kiểm soát trùng mã phòng, khóa/mở cho thuê `bookable`), `AuthService`, `UserService`.
+    - API Controllers & DTOs: `PropertyController` (`/api/v1/buildings`, `/buildings/{id}/floors`, `/buildings/{id}/rooms`, `/rooms/{id}/bookable`), `PropertyDtos`.
+    - Migration: `V001__identity.sql`, `V002__property_management.sql`.
+    - Unit Tests: 17/17 tests PASS (`AuthServiceTest` 7 ca, `PropertyServiceTest` 7 ca, `UserServiceTest` 3 ca).
   - Web:
-    - Auth Context & Client: `AuthContext.tsx`, `client.ts` (in-memory access token, single-flight 401 refresh token interceptor).
-    - UI Components & Pages: `LoginPage.tsx`, `ActivatePage.tsx`, `ChangePasswordDialog.tsx`, `UsersPage.tsx` (quản lý nhân viên cho OWNER, tạo mới, toggle khóa tài khoản, cấp lại mã mời 24h), `AppLayout.tsx` (responsive sidebar, menu theo vai trò, app bar), `DashboardPage.tsx`, `TenantPortalPage.tsx`.
+    - UI Components: `BuildingsPage.tsx` (Tabs chọn tòa nhà, thẻ phòng trực quan với màu sắc trạng thái, lọc theo trạng thái, modal thêm tòa nhà, thêm tầng, thêm phòng với giá VND chuẩn, toggle khóa cho thuê `bookable`), `AppRouter.tsx` (route `/buildings`), `AppLayout.tsx`.
     - `typecheck` PASS, `build` PASS sinh thư mục `dist/` hoàn tất.
   - Mobile:
-    - Auth Context & Storage: `AuthContext.tsx`, `mobileClient.ts` (lưu refresh token vào `expo-secure-store`, in-memory access token, single-flight refresh token interceptor).
-    - UI Screens: `LoginScreen.tsx`, `ActivateScreen.tsx`, `HomeScreen.tsx` (dashboard theo vai trò, modal đổi mật khẩu, đăng xuất), `MobileStatusScreen.tsx`.
+    - UI Screens: `PropertyScreen.tsx` (chọn tòa nhà ngang, bộ lọc chip trạng thái, danh sách thẻ phòng, toggle khóa thuê `bookable`, dialog thêm phòng mới), tích hợp điều hướng trong `HomeScreen.tsx` và `index.tsx`.
     - `typecheck` PASS.
-  - Scripts: `scripts/verify.ps1` chạy tổng hợp: Web typecheck & build PASS, Mobile typecheck PASS, Backend compile & unit tests PASS (10/10).
-- Công cụ môi trường:
-  - Sẵn sàng: Git 2.53, Node v24.14, npm 11.9, Java 17 toolchain, Android SDK tại `E:\Android\Sdk`.
-  - Đang chờ: Docker daemon chưa chạy ngầm nên Testcontainers tạm thời BLOCKED, các kiểm thử nghiệp vụ được kiểm chứng qua Unit Tests độc lập nghiêm ngặt.
-  - CSDL cục bộ: Dịch vụ Windows `postgresql-x64-18` đang chạy trên cổng 5432.
+  - Scripts: `scripts/verify.ps1` chạy tổng hợp: Web typecheck & build PASS, Mobile typecheck PASS, Backend compile & 17 unit tests PASS 100%.
 
 ## Task checklist
 
 - [x] A0 — Thiết kế thực thi, ERD, OpenAPI nền, versions, feature matrix. (PASS)
 - [x] B1 — Môi trường, scaffold ba app, Flyway/Compose. (PASS scaffold/build; Integration test PostgreSQL BLOCKED do Docker daemon chưa chạy)
 - [x] B2 — Auth, tài khoản, scope và session trên hai client. (PASS: 10 tests, Web build, Mobile typecheck)
-- [ ] C1 — Khu nhà, tầng, phòng.
+- [x] C1 — Khu nhà, tầng, phòng. (PASS: 17 tests, Web build, Mobile typecheck, migration V002)
 - [ ] C2 — Hồ sơ, hợp đồng, membership, bàn giao.
 - [ ] D1 — Giá, dịch vụ, chỉ số, cảnh báo.
 - [ ] D2 — Tính tiền, snapshot, invoice issue/adjustment.
@@ -62,17 +57,21 @@
 | 2026-09-21 | B2 | `web` / `npm.cmd run typecheck` & `npm.cmd run build` | PASS | 11648 modules transformed, bundle dist hoàn tất |
 | 2026-09-21 | B2 | `mobile` / `npm.cmd run typecheck` | PASS | Mobile TypeScript kiểm tra thành công |
 | 2026-09-21 | B2 | `root` / `.\scripts\verify.ps1` | PASS | Toàn bộ 3 ứng dụng + 10 unit tests PASS 100% |
+| 2026-09-21 | C1 | `backend` / `.\mvnw.cmd test "-Dtest=AuthServiceTest,UserServiceTest,PropertyServiceTest"` | PASS | 17/17 tests run, 0 failures, 0 errors |
+| 2026-09-21 | C1 | `web` / `npm.cmd run typecheck` & `npm.cmd run build` | PASS | 11649 modules transformed, dist bundle hoàn tất |
+| 2026-09-21 | C1 | `mobile` / `npm.cmd run typecheck` | PASS | Mobile TypeScript kiểm tra thành công |
+| 2026-09-21 | C1 | `root` / `.\scripts\verify.ps1` | PASS | Toàn bộ 3 ứng dụng + 17 unit tests PASS 100% |
 
 ## Checkpoint chi tiết
 
-- **Task / status**: B2 / PASS (Toàn bộ chức năng Auth, tài khoản, session, JWT rotation, Web UI, Mobile UI và 10 unit tests đạt 100%).
+- **Task / status**: C1 / PASS (Khu nhà, tầng, phòng, phân quyền scope STAFF vs OWNER, Web UI BuildingsPage, Mobile UI PropertyScreen, 17/17 unit tests đạt 100%).
 - **Files đã đổi / tạo mới**:
-  - `backend/`: `AuthService.java`, `UserService.java`, `JwtTokenProvider.java`, `JwtAuthenticationFilter.java`, `AuthController.java`, `UserController.java`, `AuthDtos.java`, `UserDtos.java`, `AuthServiceTest.java`, `UserServiceTest.java`.
-  - `web/`: `AuthContext.tsx`, `client.ts`, `LoginPage.tsx`, `ActivatePage.tsx`, `ChangePasswordDialog.tsx`, `UsersPage.tsx`, `AppLayout.tsx`, `DashboardPage.tsx`, `TenantPortalPage.tsx`, `AppRouter.tsx`, `App.tsx`.
-  - `mobile/`: `AuthContext.tsx`, `mobileClient.ts`, `LoginScreen.tsx`, `ActivateScreen.tsx`, `HomeScreen.tsx`, `MobileStatusScreen.tsx`, `AppProviders.tsx`, `index.tsx`.
-  - `scripts/verify.ps1`: Tích hợp thêm bước chạy 10 unit tests.
+  - `backend/`: `V002__property_management.sql`, `RoomStatus.java`, `Floor.java`, `Room.java`, `FloorRepository.java`, `RoomRepository.java`, `PropertyDtos.java`, `PropertyService.java`, `PropertyController.java`, `PropertyServiceTest.java`.
+  - `web/`: `types.ts` (property), `BuildingsPage.tsx` (Tabs tòa nhà, grid thẻ phòng, trạng thái, modal thêm tòa/tầng/phòng, toggle bookable), `AppRouter.tsx`.
+  - `mobile/`: `PropertyScreen.tsx` (chọn tòa nhà ngang, chip lọc trạng thái, thẻ phòng, toggle bookable, dialog thêm phòng), `HomeScreen.tsx`, `index.tsx`.
+  - `scripts/verify.ps1`: Tích hợp thêm `PropertyServiceTest` (17 tests).
   - `docs/FEATURE_MATRIX.md`, `docs/STATUS.md`.
-- **API/migration**: `/api/v1/auth/login`, `/refresh`, `/logout`, `/activate`, `/change-password`; `/api/v1/users`, `/staff`, `/{id}/status`, `/{id}/reissue-invite`, `/{id}/assignments`.
-- **Known failures/blockers**: Testcontainers integration test chờ Docker daemon bật; 10/10 unit tests nghiệp vụ chạy độc lập thành công 100%.
-- **Exact next action**: Tiến hành Task C1 — Khu nhà, tầng, phòng (Property Module: Migration Flyway V002, CRUD Building/Floor/Room, Room statuses, Web UI & Mobile UI).
-- **Git commit**: Sẽ commit sau khi verify hoàn tất.
+- **API/migration**: `V002__property_management.sql`; `/api/v1/buildings`, `/buildings/{id}`, `/buildings/{id}/active`, `/buildings/{id}/floors`, `/buildings/{id}/rooms`, `/rooms/{id}`, `/rooms/{id}/bookable`.
+- **Known failures/blockers**: Không có lỗi chức năng; Testcontainers cần Docker daemon, unit tests đạt 17/17 PASS.
+- **Exact next action**: Tiến hành Task C2 — Hồ sơ khách thuê, hợp đồng, thành viên, cọc/bàn giao (Tenancy & Contract Module: Migration Flyway V003, Hợp đồng DRAFT -> ACTIVE, ràng buộc duy nhất `uq_active_room_contract`, thành viên phòng, bàn giao tài sản, Web UI & Mobile UI).
+- **Git commit**: Sẽ commit ngay sau khi cập nhật docs.

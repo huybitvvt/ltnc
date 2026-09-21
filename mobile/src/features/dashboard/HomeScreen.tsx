@@ -1,13 +1,14 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { Text, Surface, Button, Chip, Divider, Portal, Dialog, TextInput, HelperText, useTheme } from 'react-native-paper';
 import { useMobileAuth } from '../auth/AuthContext';
 
 interface HomeScreenProps {
   onNavigateToStatus: () => void;
+  onNavigateToProperty?: () => void;
 }
 
-export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateToStatus }) => {
+export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateToStatus, onNavigateToProperty }) => {
   const theme = useTheme();
   const { user, logout, changePassword } = useMobileAuth();
 
@@ -84,14 +85,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateToStatus }) =>
       <Surface style={styles.menuCard} elevation={1}>
         {user?.role !== 'TENANT' ? (
           <>
-            <View style={styles.menuItem}>
+            <TouchableOpacity onPress={onNavigateToProperty} activeOpacity={0.7} style={styles.menuItem}>
               <Text variant="bodyLarge" style={styles.menuItemText}>
                 🏢 Tòa nhà & Phòng
               </Text>
               <Text variant="bodySmall" style={styles.menuItemSub}>
                 Xem danh sách tòa nhà, sơ đồ tầng và trạng thái phòng
               </Text>
-            </View>
+            </TouchableOpacity>
             <Divider />
             <View style={styles.menuItem}>
               <Text variant="bodyLarge" style={styles.menuItemText}>

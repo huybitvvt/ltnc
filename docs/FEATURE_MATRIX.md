@@ -17,14 +17,14 @@ Trạng thái hợp lệ cho các cột: `NOT_STARTED`, `IN_PROGRESS`, `PASS`, `
 | **AUTH-07** | Tài khoản & Xác thực | Đăng xuất & Thu hồi phiên làm việc | ALL | PASS | PASS | PASS | PASS | `/api/v1/auth/logout`, `AuthContext.logout`, revoke session |
 | **USER-01** | Quản trị người dùng | Quản lý tài khoản nhân viên (tạo/khóa) | OWNER | PASS | PASS | PASS | PASS | `UserServiceTest.testCreateStaff_Success`, `UserServiceTest.testUpdateUserStatus_Disable_RevokesSessions`, `web/src/features/users/UsersPage` |
 | **USER-02** | Quản trị người dùng | Gán và cập nhật phân công tòa nhà cho STAFF | OWNER | PASS | PASS | PASS | PASS | `UserService.updateUserAssignments`, `BuildingStaffAssignmentRepository` |
-| **PROP-01** | Bất động sản | Quản lý tòa nhà (Thêm/Sửa/Trạng thái) | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **PROP-02** | Bất động sản | Xem danh sách tòa nhà trong phạm vi phân công | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **PROP-03** | Bất động sản | Quản lý tầng của tòa nhà | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **PROP-04** | Bất động sản | Quản lý phòng trọ (Thêm/Sửa/Sức chứa/Giá) | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **PROP-05** | Bất động sản | Quản lý phòng trọ trong tòa được giao | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **PROP-06** | Bất động sản | Khóa/Mở trạng thái cho thuê phòng (bookable) | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **PROP-07** | Bất động sản | Khóa/Mở trạng thái cho thuê phòng (bookable) | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **PROP-08** | Bất động sản | Xem thông tin phòng đang thuê | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **PROP-01** | Bất động sản | Quản lý tòa nhà (Thêm/Sửa/Trạng thái) | OWNER | PASS | PASS | PASS | PASS | `PropertyServiceTest.testCreateBuilding_Owner_Success`, `web/src/features/property/BuildingsPage`, `mobile/src/features/property/PropertyScreen` |
+| **PROP-02** | Bất động sản | Xem danh sách tòa nhà trong phạm vi phân công | STAFF | PASS | PASS | PASS | PASS | `PropertyServiceTest.testListBuildings_Staff_OnlyAssigned`, `PropertyServiceTest.testCheckBuildingAccess_Staff_NotAssigned_ThrowsAccessDenied` |
+| **PROP-03** | Bất động sản | Quản lý tầng của tòa nhà | OWNER | PASS | PASS | PASS | PASS | `PropertyService.createFloor`, `FloorRepository`, `BuildingsPage` |
+| **PROP-04** | Bất động sản | Quản lý phòng trọ (Thêm/Sửa/Sức chứa/Giá) | OWNER | PASS | PASS | PASS | PASS | `PropertyServiceTest.testCreateRoom_Success`, `PropertyServiceTest.testCreateRoom_DuplicateRoomNumber_ThrowsException`, `BuildingsPage` |
+| **PROP-05** | Bất động sản | Quản lý phòng trọ trong tòa được giao | STAFF | PASS | PASS | PASS | PASS | `PropertyService.listRooms`, `PropertyScreen` |
+| **PROP-06** | Bất động sản | Khóa/Mở trạng thái cho thuê phòng (bookable) | OWNER | PASS | PASS | PASS | PASS | `PropertyServiceTest.testSetRoomBookable_Success`, toggle lock trên Web & Mobile |
+| **PROP-07** | Bất động sản | Khóa/Mở trạng thái cho thuê phòng (bookable) | STAFF | PASS | PASS | PASS | PASS | `PropertyServiceTest.testSetRoomBookable_Success`, toggle lock trên Web & Mobile |
+| **PROP-08** | Bất động sản | Xem thông tin phòng đang thuê | TENANT | PASS | PASS | PASS | PASS | `TenantPortalPage`, `HomeScreen` cư dân |
 | **TEN-01** | Cư trú & Khách thuê | Quản lý hồ sơ khách thuê | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
 | **TEN-02** | Cư trú & Khách thuê | Quản lý hồ sơ khách thuê trong phạm vi | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
 | **TEN-03** | Cư trú & Khách thuê | Tạo mã mời kích hoạt tài khoản người đại diện | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
