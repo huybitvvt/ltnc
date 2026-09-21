@@ -1,0 +1,90 @@
+# Ma trận Chức năng & Nghiệm thu (docs/FEATURE_MATRIX.md)
+
+Tài liệu này theo dõi tiến độ và mức độ hoàn thiện của từng chức năng xuyên suốt các thành phần: **API (Backend), Web (React), Mobile (React Native/Expo Android), Automated Test và Bằng chứng kiểm thử (Evidence)** cho cả 3 vai trò: `OWNER`, `STAFF`, `TENANT`.
+
+Trạng thái hợp lệ cho các cột: `NOT_STARTED`, `IN_PROGRESS`, `PASS`, `FAIL`, `BLOCKED`.
+
+---
+
+| ID | Nhóm nghiệp vụ | Chức năng (Capability) | Vai trò | API | Web | Mobile | Test | Evidence |
+|---|---|---|---|---|---|---|---|---|
+| **AUTH-01** | Tài khoản & Xác thực | Đăng nhập bằng tài khoản & mật khẩu | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **AUTH-02** | Tài khoản & Xác thực | Đăng nhập bằng tài khoản & mật khẩu | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **AUTH-03** | Tài khoản & Xác thực | Đăng nhập bằng tài khoản & mật khẩu | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **AUTH-04** | Tài khoản & Xác thực | Kích hoạt tài khoản qua mã mời | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **AUTH-05** | Tài khoản & Xác thực | Đổi mật khẩu & Reset mật khẩu | ALL | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **AUTH-06** | Tài khoản & Xác thực | Xoay vòng phiên & Refresh token | ALL | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **AUTH-07** | Tài khoản & Xác thực | Đăng xuất & Thu hồi phiên làm việc | ALL | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **USER-01** | Quản trị người dùng | Quản lý tài khoản nhân viên (tạo/khóa) | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **USER-02** | Quản trị người dùng | Gán và cập nhật phân công tòa nhà cho STAFF | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **PROP-01** | Bất động sản | Quản lý tòa nhà (Thêm/Sửa/Trạng thái) | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **PROP-02** | Bất động sản | Xem danh sách tòa nhà trong phạm vi phân công | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **PROP-03** | Bất động sản | Quản lý tầng của tòa nhà | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **PROP-04** | Bất động sản | Quản lý phòng trọ (Thêm/Sửa/Sức chứa/Giá) | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **PROP-05** | Bất động sản | Quản lý phòng trọ trong tòa được giao | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **PROP-06** | Bất động sản | Khóa/Mở trạng thái cho thuê phòng (bookable) | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **PROP-07** | Bất động sản | Khóa/Mở trạng thái cho thuê phòng (bookable) | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **PROP-08** | Bất động sản | Xem thông tin phòng đang thuê | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **TEN-01** | Cư trú & Khách thuê | Quản lý hồ sơ khách thuê | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **TEN-02** | Cư trú & Khách thuê | Quản lý hồ sơ khách thuê trong phạm vi | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **TEN-03** | Cư trú & Khách thuê | Tạo mã mời kích hoạt tài khoản người đại diện | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **TEN-04** | Cư trú & Khách thuê | Tạo mã mời kích hoạt tài khoản người đại diện | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **TEN-05** | Cư trú & Khách thuê | Xem hồ sơ cá nhân của mình | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **CONT-01**| Hợp đồng thuê phòng | Lập hợp đồng nháp (DRAFT) | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **CONT-02**| Hợp đồng thuê phòng | Lập hợp đồng nháp trong phạm vi | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **CONT-03**| Hợp đồng thuê phòng | Nhận phòng & Kích hoạt hợp đồng (ACTIVE) | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **CONT-04**| Hợp đồng thuê phòng | Nhận phòng & Kích hoạt hợp đồng (ACTIVE) | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **CONT-05**| Hợp đồng thuê phòng | Xem hợp đồng đang thuê & hợp đồng cũ | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **CONT-06**| Hợp đồng thuê phòng | Gia hạn hợp đồng (tăng ngày dự kiến) | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **CONT-07**| Hợp đồng thuê phòng | Gia hạn hợp đồng trong phạm vi | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **CONT-08**| Hợp đồng thuê phòng | Quản lý thành viên cùng phòng | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **CONT-09**| Hợp đồng thuê phòng | Quản lý thành viên cùng phòng trong phạm vi | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **CONT-10**| Hợp đồng thuê phòng | Xem danh sách thành viên cùng phòng | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **CONT-11**| Hợp đồng thuê phòng | Trả phòng thực tế & Giải phóng phòng | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **CONT-12**| Hợp đồng thuê phòng | Trả phòng thực tế & Giải phóng phòng | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **MET-01** | Đơn giá & Đo lường | Cấu hình loại dịch vụ | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **MET-02** | Đơn giá & Đo lường | Thiết lập bảng đơn giá theo tháng hiệu lực | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **MET-03** | Đơn giá & Đo lường | Thiết lập bảng đơn giá trong phạm vi | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **MET-04** | Đơn giá & Đo lường | Ghi chỉ số đồng hồ & Tải ảnh đính kèm | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **MET-05** | Đơn giá & Đo lường | Ghi chỉ số đồng hồ & Tải ảnh đính kèm | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **MET-06** | Đơn giá & Đo lường | Xem chỉ số và ảnh đồng hồ trên hóa đơn | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **MET-07** | Đơn giá & Đo lường | Đánh giá cảnh báo tiêu thụ bất thường (3 kỳ)| OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **MET-08** | Đơn giá & Đo lường | Xác nhận cảnh báo chỉ số đúng có lý do | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **INV-01** | Hóa đơn & Tính tiền | Xem trước & Tính toán hóa đơn nháp | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **INV-02** | Hóa đơn & Tính tiền | Xem trước & Tính toán hóa đơn nháp | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **INV-03** | Hóa đơn & Tính tiền | Phát hành hóa đơn (chốt snapshot bất biến) | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **INV-04** | Hóa đơn & Tính tiền | Phát hành hóa đơn trong phạm vi | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **INV-05** | Hóa đơn & Tính tiền | Xem hóa đơn đã phát hành & chi tiết dòng | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **INV-06** | Hóa đơn & Tính tiền | Điều chỉnh tăng/giảm giá trị hóa đơn | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **INV-07** | Hóa đơn & Tính tiền | Điều chỉnh tăng/giảm giá trị hóa đơn | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **INV-08** | Hóa đơn & Tính tiền | Thêm ghi chú đính chính mô tả hóa đơn | OWNER/STAFF| NOT_STARTED| NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **PAY-01** | Thu tiền & Sổ cái | Ghi nhận thu tiền hóa đơn | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **PAY-02** | Thu tiền & Sổ cái | Ghi nhận thu tiền hóa đơn trong phạm vi | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **PAY-03** | Thu tiền & Sổ cái | Sửa khoản thu nhập nhầm (PAYMENT_CORRECTION)| OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **PAY-04** | Thu tiền & Sổ cái | Sửa khoản thu nhập nhầm trong phạm vi | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **PAY-05** | Thu tiền & Sổ cái | Hoàn tiền thực tế từ khoản tiền dư | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **PAY-06** | Thu tiền & Sổ cái | Hoàn tiền thực tế từ khoản tiền dư | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **PAY-07** | Thu tiền & Sổ cái | Chuyển tiền dư giữa 2 hóa đơn cùng hợp đồng| OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **PAY-08** | Thu tiền & Sổ cái | Chuyển tiền dư giữa 2 hóa đơn cùng hợp đồng| STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **PAY-09** | Thu tiền & Sổ cái | Xem lịch sử thanh toán hóa đơn của mình | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **DEP-01** | Tiền cọc & Quyết toán| Ghi nhận thu tiền cọc | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **DEP-02** | Tiền cọc & Quyết toán| Ghi nhận thu tiền cọc trong phạm vi | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **DEP-03** | Tiền cọc & Quyết toán| Sửa sai khoản thu cọc | OWNER/STAFF| NOT_STARTED| NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **DEP-04** | Tiền cọc & Quyết toán| Hoàn trả tiền cọc | OWNER/STAFF| NOT_STARTED| NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **DEP-05** | Tiền cọc & Quyết toán| Khấu trừ tiền cọc do hư hại thiết bị | OWNER/STAFF| NOT_STARTED| NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **DEP-06** | Tiền cọc & Quyết toán| Bù trừ tiền cọc sang thanh toán hóa đơn | OWNER/STAFF| NOT_STARTED| NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **DEP-07** | Tiền cọc & Quyết toán| Xác nhận hoàn tất quyết toán cọc (SETTLED) | OWNER/STAFF| NOT_STARTED| NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **DEP-08** | Tiền cọc & Quyết toán| Xem số dư cọc & lịch sử cọc của mình | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **OPS-01** | Sự cố & Sửa chữa | Báo cáo sự cố kèm ảnh | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **OPS-02** | Sự cố & Sửa chữa | Tạo và tiếp nhận sự cố trong phạm vi | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **OPS-03** | Sự cố & Sửa chữa | Phân công nhân viên & Cập nhật tiến độ | OWNER/STAFF| NOT_STARTED| NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **OPS-04** | Sự cố & Sửa chữa | Xác nhận hoàn tất hoặc Yêu cầu mở lại sự cố | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **OPS-05** | Phản hồi hóa đơn | Gửi phản hồi thắc mắc về hóa đơn | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **OPS-06** | Phản hồi hóa đơn | Tiếp nhận và trả lời phản hồi hóa đơn | OWNER/STAFF| NOT_STARTED| NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **NOTIF-01**| Thông báo nội bộ | Nhận thông báo tự động (hóa đơn, sự cố) | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **NOTIF-02**| Thông báo nội bộ | Quản lý soạn và gửi thông báo cho tòa | OWNER/STAFF| NOT_STARTED| NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **REP-01** | Dashboard & Báo cáo | Dashboard tổng quan tài chính và phòng toàn bộ| OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **REP-02** | Dashboard & Báo cáo | Dashboard trong phạm vi tòa nhà được giao | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **REP-03** | Dashboard & Báo cáo | Dashboard tổng quan cá nhân người thuê | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **AUDIT-01**| Lịch sử kiểm toán | Tra cứu lịch sử thao tác tài chính có phân quyền| OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **AUDIT-02**| Lịch sử kiểm toán | Tra cứu lịch sử thao tác trong phạm vi tòa | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
