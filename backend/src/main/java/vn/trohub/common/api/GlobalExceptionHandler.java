@@ -36,6 +36,27 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
     }
 
+    @ExceptionHandler(org.springframework.security.access.AccessDeniedException.class)
+    public ResponseEntity<ApiError> handleAccessDeniedException(org.springframework.security.access.AccessDeniedException ex) {
+        String traceId = UUID.randomUUID().toString();
+        ApiError error = ApiError.of("FORBIDDEN", ex.getMessage() != null ? ex.getMessage() : "Từ chối truy cập", traceId);
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).body(error);
+    }
+
+    @ExceptionHandler(jakarta.persistence.EntityNotFoundException.class)
+    public ResponseEntity<ApiError> handleEntityNotFoundException(jakarta.persistence.EntityNotFoundException ex) {
+        String traceId = UUID.randomUUID().toString();
+        ApiError error = ApiError.of("NOT_FOUND", ex.getMessage(), traceId);
+        return ResponseEntity.status(HttpStatus.NOT_FOUND).body(error);
+    }
+
+    @ExceptionHandler(IllegalStateException.class)
+    public ResponseEntity<ApiError> handleIllegalStateException(IllegalStateException ex) {
+        String traceId = UUID.randomUUID().toString();
+        ApiError error = ApiError.of("INVALID_STATE", ex.getMessage(), traceId);
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleGenericException(Exception ex) {
         String traceId = UUID.randomUUID().toString();

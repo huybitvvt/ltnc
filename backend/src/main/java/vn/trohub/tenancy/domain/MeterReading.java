@@ -49,10 +49,15 @@ public class MeterReading {
     public MeterReading() {}
 
     public MeterReading(RoomMeter meter, LocalDate readingDate, BigDecimal value, MeterReadingKind kind, User createdBy) {
+        this(meter, readingDate, value, kind, null, createdBy);
+    }
+
+    public MeterReading(RoomMeter meter, LocalDate readingDate, BigDecimal value, MeterReadingKind kind, UUID fileId, User createdBy) {
         this.meter = meter;
         this.readingDate = readingDate;
         this.value = value;
         this.kind = kind;
+        this.fileId = fileId;
         this.createdBy = createdBy;
     }
 

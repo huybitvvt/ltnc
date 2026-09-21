@@ -61,6 +61,10 @@ public class RoomMeter {
         return id;
     }
 
+    public void setId(UUID id) {
+        this.id = id;
+    }
+
     public Room getRoom() {
         return room;
     }

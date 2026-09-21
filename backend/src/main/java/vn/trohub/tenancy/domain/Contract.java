@@ -72,6 +72,10 @@ public class Contract {
         return id;
     }
 
+    public void setId(UUID id) {
+        this.id = id;
+    }
+
     public Room getRoom() {
         return room;
     }

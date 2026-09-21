@@ -42,14 +42,14 @@ Trạng thái hợp lệ cho các cột: `NOT_STARTED`, `IN_PROGRESS`, `PASS`, `
 | **CONT-10**| Hợp đồng thuê phòng | Xem danh sách thành viên cùng phòng | TENANT | PASS | PASS | PASS | PASS | `TenantPortalPage`, `ContractsScreen` chi tiết thành viên |
 | **CONT-11**| Hợp đồng thuê phòng | Trả phòng thực tế & Giải phóng phòng | OWNER | PASS | PASS | PASS | PASS | `TenancyService.checkoutContract`, chuyển trạng thái ENDED & VACANT |
 | **CONT-12**| Hợp đồng thuê phòng | Trả phòng thực tế & Giải phóng phòng | STAFF | PASS | PASS | PASS | PASS | `TenancyService.checkoutContract` |
-| **MET-01** | Đơn giá & Đo lường | Cấu hình loại dịch vụ | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **MET-02** | Đơn giá & Đo lường | Thiết lập bảng đơn giá theo tháng hiệu lực | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **MET-03** | Đơn giá & Đo lường | Thiết lập bảng đơn giá trong phạm vi | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **MET-04** | Đơn giá & Đo lường | Ghi chỉ số đồng hồ & Tải ảnh đính kèm | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **MET-05** | Đơn giá & Đo lường | Ghi chỉ số đồng hồ & Tải ảnh đính kèm | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **MET-06** | Đơn giá & Đo lường | Xem chỉ số và ảnh đồng hồ trên hóa đơn | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **MET-07** | Đơn giá & Đo lường | Đánh giá cảnh báo tiêu thụ bất thường (3 kỳ)| OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **MET-08** | Đơn giá & Đo lường | Xác nhận cảnh báo chỉ số đúng có lý do | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **MET-01** | Đơn giá & Đo lường | Cấu hình loại dịch vụ | OWNER | PASS | PASS | PASS | PASS | `PricingServiceTest.testCreateServiceDefinition_Owner_Success`, `web/src/features/metering/MeteringPage` |
+| **MET-02** | Đơn giá & Đo lường | Thiết lập bảng đơn giá theo tháng hiệu lực | OWNER | PASS | PASS | PASS | PASS | `PricingServiceTest.testCreateTariff_DuplicateMonth_ThrowsException`, constraint `uq_building_service_month` |
+| **MET-03** | Đơn giá & Đo lường | Thiết lập bảng đơn giá trong phạm vi | STAFF | PASS | PASS | PASS | PASS | `PricingService.createTariff`, kiểm tra phân công quản lý tòa nhà |
+| **MET-04** | Đơn giá & Đo lường | Ghi chỉ số đồng hồ & Tải ảnh đính kèm | OWNER | PASS | PASS | PASS | PASS | `MeteringServiceTest.testRecordReading_Success`, `MeteringServiceTest.testRecordReading_LowerThanPrevious_ThrowsException` (BR-059) |
+| **MET-05** | Đơn giá & Đo lường | Ghi chỉ số đồng hồ & Tải ảnh đính kèm | STAFF | PASS | PASS | PASS | PASS | `MeteringService.recordReading`, `MeteringScreen` ghi chỉ số & upload ảnh |
+| **MET-06** | Đơn giá & Đo lường | Xem chỉ số và ảnh đồng hồ trên hóa đơn | TENANT | PASS | PASS | PASS | PASS | `MeteringController.getRoomReadings`, hiển thị trên web & app |
+| **MET-07** | Đơn giá & Đo lường | Đánh giá cảnh báo tiêu thụ bất thường (3 kỳ)| OWNER | PASS | PASS | PASS | PASS | `MeteringServiceTest.testEvaluateConsumption_OverThreshold_ReturnsWarning` (BR-141), snapshot so sánh median |
+| **MET-08** | Đơn giá & Đo lường | Xác nhận cảnh báo chỉ số đúng có lý do | STAFF | PASS | PASS | PASS | PASS | `MeteringServiceTest.testAcknowledgeAlert_Success` (BR-145), dialog xác nhận giải trình trên web & app |
 | **INV-01** | Hóa đơn & Tính tiền | Xem trước & Tính toán hóa đơn nháp | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
 | **INV-02** | Hóa đơn & Tính tiền | Xem trước & Tính toán hóa đơn nháp | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
 | **INV-03** | Hóa đơn & Tính tiền | Phát hành hóa đơn (chốt snapshot bất biến) | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |

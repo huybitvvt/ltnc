@@ -7,12 +7,14 @@ interface HomeScreenProps {
   onNavigateToStatus: () => void;
   onNavigateToProperty?: () => void;
   onNavigateToContracts?: () => void;
+  onNavigateToMetering?: () => void;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   onNavigateToStatus,
   onNavigateToProperty,
   onNavigateToContracts,
+  onNavigateToMetering,
 }) => {
   const theme = useTheme();
   const { user, logout, changePassword } = useMobileAuth();
@@ -108,14 +110,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               </Text>
             </TouchableOpacity>
             <Divider />
-            <View style={styles.menuItem}>
+            <TouchableOpacity style={styles.menuItem} onPress={onNavigateToMetering}>
               <Text variant="bodyLarge" style={styles.menuItemText}>
                 ⚡ Điện nước & Dịch vụ
               </Text>
               <Text variant="bodySmall" style={styles.menuItemSub}>
-                Ghi chỉ số đồng hồ điện nước hàng tháng
+                Ghi chỉ số đồng hồ điện nước và cảnh báo tiêu thụ
               </Text>
-            </View>
+            </TouchableOpacity>
           </>
         ) : (
           <>

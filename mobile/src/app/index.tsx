@@ -8,11 +8,12 @@ import { HomeScreen } from '@/features/dashboard/HomeScreen';
 import { MobileStatusScreen } from '@/features/status/MobileStatusScreen';
 import { PropertyScreen } from '@/features/property/PropertyScreen';
 import { ContractsScreen } from '@/features/contracts/ContractsScreen';
+import { MeteringScreen } from '@/features/metering/MeteringScreen';
 
 export default function IndexScreen() {
   const { isAuthenticated, isLoading } = useMobileAuth();
   const [authView, setAuthView] = useState<'LOGIN' | 'ACTIVATE'>('LOGIN');
-  const [mainView, setMainView] = useState<'HOME' | 'STATUS' | 'PROPERTY' | 'CONTRACTS'>('HOME');
+  const [mainView, setMainView] = useState<'HOME' | 'STATUS' | 'PROPERTY' | 'CONTRACTS' | 'METERING'>('HOME');
 
   if (isLoading) {
     return (
@@ -42,11 +43,16 @@ export default function IndexScreen() {
     return <ContractsScreen onBack={() => setMainView('HOME')} />;
   }
 
+  if (mainView === 'METERING') {
+    return <MeteringScreen onBack={() => setMainView('HOME')} />;
+  }
+
   return (
     <HomeScreen
       onNavigateToStatus={() => setMainView('STATUS')}
       onNavigateToProperty={() => setMainView('PROPERTY')}
       onNavigateToContracts={() => setMainView('CONTRACTS')}
+      onNavigateToMetering={() => setMainView('METERING')}
     />
   );
 }

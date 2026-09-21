@@ -14,4 +14,11 @@ public interface MeterReadingRepository extends JpaRepository<MeterReading, UUID
     List<MeterReading> findByMeterIdOrderByReadingDateDesc(UUID meterId);
 
     List<MeterReading> findByMeterRoomIdAndKind(UUID roomId, MeterReadingKind kind);
+
+    List<MeterReading> findByMeterRoomIdOrderByReadingDateDesc(UUID roomId);
+
+    List<MeterReading> findByMeterIdAndReadingDateLessThanEqualOrderByReadingDateDescCreatedAtDesc(
+            UUID meterId, java.time.LocalDate readingDate);
+
+    java.util.Optional<MeterReading> findFirstByMeterIdOrderByReadingDateDescCreatedAtDesc(UUID meterId);
 }

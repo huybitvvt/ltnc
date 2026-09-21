@@ -90,7 +90,7 @@ export const AppLayout: React.FC = () => {
       ? [
           { text: 'Khu nhà & Phòng', icon: <ApartmentIcon />, path: '/buildings' },
           { text: 'Hợp đồng & Cư dân', icon: <PeopleIcon />, path: '/contracts' },
-          { text: 'Dịch vụ & Điện nước', icon: <MeterIcon />, path: '/meters' },
+          { text: 'Dịch vụ & Điện nước', icon: <MeterIcon />, path: '/metering' },
         ]
       : []),
     { text: 'Hóa đơn & Tiền phòng', icon: <ReceiptIcon />, path: '/invoices' },

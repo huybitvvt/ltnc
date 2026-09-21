@@ -49,6 +49,18 @@ public class UserPrincipal implements UserDetails {
         return assignedBuildingIds;
     }
 
+    public boolean isOwner() {
+        return role == UserRole.OWNER;
+    }
+
+    public boolean isStaff() {
+        return role == UserRole.STAFF;
+    }
+
+    public boolean isTenant() {
+        return role == UserRole.TENANT;
+    }
+
     public boolean hasBuildingScope(UUID buildingId) {
         if (role == UserRole.OWNER) {
             return true;
