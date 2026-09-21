@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: trohub-backend
+  profiles:
+    active: local
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      show-details: never
+
+server:
+  port: 8080
+  servlet:
+    context-path: /
