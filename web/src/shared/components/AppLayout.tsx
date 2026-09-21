@@ -89,7 +89,7 @@ export const AppLayout: React.FC = () => {
     ...(user?.role !== 'TENANT'
       ? [
           { text: 'Khu nhà & Phòng', icon: <ApartmentIcon />, path: '/buildings' },
-          { text: 'Khách thuê', icon: <PeopleIcon />, path: '/tenants' },
+          { text: 'Hợp đồng & Cư dân', icon: <PeopleIcon />, path: '/contracts' },
           { text: 'Dịch vụ & Điện nước', icon: <MeterIcon />, path: '/meters' },
         ]
       : []),

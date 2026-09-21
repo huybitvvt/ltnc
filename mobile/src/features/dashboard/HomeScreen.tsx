@@ -6,9 +6,14 @@ import { useMobileAuth } from '../auth/AuthContext';
 interface HomeScreenProps {
   onNavigateToStatus: () => void;
   onNavigateToProperty?: () => void;
+  onNavigateToContracts?: () => void;
 }
 
-export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateToStatus, onNavigateToProperty }) => {
+export const HomeScreen: React.FC<HomeScreenProps> = ({
+  onNavigateToStatus,
+  onNavigateToProperty,
+  onNavigateToContracts,
+}) => {
   const theme = useTheme();
   const { user, logout, changePassword } = useMobileAuth();
 
@@ -94,14 +99,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateToStatus, onNa
               </Text>
             </TouchableOpacity>
             <Divider />
-            <View style={styles.menuItem}>
+            <TouchableOpacity style={styles.menuItem} onPress={onNavigateToContracts}>
               <Text variant="bodyLarge" style={styles.menuItemText}>
                 👥 Khách thuê & Hợp đồng
               </Text>
               <Text variant="bodySmall" style={styles.menuItemSub}>
                 Hồ sơ khách thuê, hợp đồng và cọc phòng
               </Text>
-            </View>
+            </TouchableOpacity>
             <Divider />
             <View style={styles.menuItem}>
               <Text variant="bodyLarge" style={styles.menuItemText}>
@@ -114,14 +119,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({ onNavigateToStatus, onNa
           </>
         ) : (
           <>
-            <View style={styles.menuItem}>
+            <TouchableOpacity style={styles.menuItem} onPress={onNavigateToContracts}>
               <Text variant="bodyLarge" style={styles.menuItemText}>
-                🛏️ Phòng của tôi
+                🛏️ Phòng & Hợp đồng của tôi
               </Text>
               <Text variant="bodySmall" style={styles.menuItemSub}>
                 Hợp đồng thuê, giá phòng và các tiện ích đã đăng ký
               </Text>
-            </View>
+            </TouchableOpacity>
             <Divider />
             <View style={styles.menuItem}>
               <Text variant="bodyLarge" style={styles.menuItemText}>

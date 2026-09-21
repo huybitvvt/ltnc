@@ -25,23 +25,23 @@ Trạng thái hợp lệ cho các cột: `NOT_STARTED`, `IN_PROGRESS`, `PASS`, `
 | **PROP-06** | Bất động sản | Khóa/Mở trạng thái cho thuê phòng (bookable) | OWNER | PASS | PASS | PASS | PASS | `PropertyServiceTest.testSetRoomBookable_Success`, toggle lock trên Web & Mobile |
 | **PROP-07** | Bất động sản | Khóa/Mở trạng thái cho thuê phòng (bookable) | STAFF | PASS | PASS | PASS | PASS | `PropertyServiceTest.testSetRoomBookable_Success`, toggle lock trên Web & Mobile |
 | **PROP-08** | Bất động sản | Xem thông tin phòng đang thuê | TENANT | PASS | PASS | PASS | PASS | `TenantPortalPage`, `HomeScreen` cư dân |
-| **TEN-01** | Cư trú & Khách thuê | Quản lý hồ sơ khách thuê | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **TEN-02** | Cư trú & Khách thuê | Quản lý hồ sơ khách thuê trong phạm vi | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **TEN-03** | Cư trú & Khách thuê | Tạo mã mời kích hoạt tài khoản người đại diện | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **TEN-04** | Cư trú & Khách thuê | Tạo mã mời kích hoạt tài khoản người đại diện | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **TEN-05** | Cư trú & Khách thuê | Xem hồ sơ cá nhân của mình | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **CONT-01**| Hợp đồng thuê phòng | Lập hợp đồng nháp (DRAFT) | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **CONT-02**| Hợp đồng thuê phòng | Lập hợp đồng nháp trong phạm vi | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **CONT-03**| Hợp đồng thuê phòng | Nhận phòng & Kích hoạt hợp đồng (ACTIVE) | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **CONT-04**| Hợp đồng thuê phòng | Nhận phòng & Kích hoạt hợp đồng (ACTIVE) | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **CONT-05**| Hợp đồng thuê phòng | Xem hợp đồng đang thuê & hợp đồng cũ | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **CONT-06**| Hợp đồng thuê phòng | Gia hạn hợp đồng (tăng ngày dự kiến) | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **CONT-07**| Hợp đồng thuê phòng | Gia hạn hợp đồng trong phạm vi | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **CONT-08**| Hợp đồng thuê phòng | Quản lý thành viên cùng phòng | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **CONT-09**| Hợp đồng thuê phòng | Quản lý thành viên cùng phòng trong phạm vi | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **CONT-10**| Hợp đồng thuê phòng | Xem danh sách thành viên cùng phòng | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **CONT-11**| Hợp đồng thuê phòng | Trả phòng thực tế & Giải phóng phòng | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **CONT-12**| Hợp đồng thuê phòng | Trả phòng thực tế & Giải phóng phòng | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **TEN-01** | Cư trú & Khách thuê | Quản lý hồ sơ khách thuê | OWNER | PASS | PASS | PASS | PASS | `TenancyServiceTest.testCreateTenantProfile_Success`, `web/src/features/contracts/ContractsPage`, `mobile/src/features/contracts/ContractsScreen` |
+| **TEN-02** | Cư trú & Khách thuê | Quản lý hồ sơ khách thuê trong phạm vi | STAFF | PASS | PASS | PASS | PASS | `TenancyService.listTenantProfiles`, scope filter |
+| **TEN-03** | Cư trú & Khách thuê | Tạo mã mời kích hoạt tài khoản người đại diện | OWNER | PASS | PASS | PASS | PASS | `TenancyServiceTest.testIssueTenantInvite_Success`, `ContractsPage` dialog mã mời |
+| **TEN-04** | Cư trú & Khách thuê | Tạo mã mời kích hoạt tài khoản người đại diện | STAFF | PASS | PASS | PASS | PASS | `TenancyService.issueTenantInvite`, `ContractsScreen` dialog mã mời |
+| **TEN-05** | Cư trú & Khách thuê | Xem hồ sơ cá nhân của mình | TENANT | PASS | PASS | PASS | PASS | `TenantPortalPage`, `HomeScreen` cmt/cccd masked |
+| **CONT-01**| Hợp đồng thuê phòng | Lập hợp đồng nháp (DRAFT) | OWNER | PASS | PASS | PASS | PASS | `TenancyServiceTest.testCreateDraftContract_Success`, `TenancyServiceTest.testCreateDraftContract_UnbookableRoom_ThrowsException`, modal lập hợp đồng |
+| **CONT-02**| Hợp đồng thuê phòng | Lập hợp đồng nháp trong phạm vi | STAFF | PASS | PASS | PASS | PASS | `TenancyService.createDraftContract`, STAFF building assignment check |
+| **CONT-03**| Hợp đồng thuê phòng | Nhận phòng & Kích hoạt hợp đồng (ACTIVE) | OWNER | PASS | PASS | PASS | PASS | `TenancyServiceTest.testActivateContract_Success`, `TenancyServiceTest.testActivateContract_RoomAlreadyRented_ThrowsException`, migration `uq_active_room_contract`, modal bàn giao điện nước |
+| **CONT-04**| Hợp đồng thuê phòng | Nhận phòng & Kích hoạt hợp đồng (ACTIVE) | STAFF | PASS | PASS | PASS | PASS | `TenancyService.activateContract`, modal kích hoạt & chỉ số bàn giao |
+| **CONT-05**| Hợp đồng thuê phòng | Xem hợp đồng đang thuê & hợp đồng cũ | TENANT | PASS | PASS | PASS | PASS | `TenancyServiceTest.testListContracts_Tenant_CannotReadDrafts`, `TenantPortalPage` & `ContractsScreen` hiển thị hợp đồng thật |
+| **CONT-06**| Hợp đồng thuê phòng | Gia hạn hợp đồng (tăng ngày dự kiến) | OWNER | PASS | PASS | PASS | PASS | `TenancyServiceTest.testExtendContract_Success_KeepsRent`, modal gia hạn hợp đồng |
+| **CONT-07**| Hợp đồng thuê phòng | Gia hạn hợp đồng trong phạm vi | STAFF | PASS | PASS | PASS | PASS | `TenancyService.extendContract`, modal gia hạn mobile & web |
+| **CONT-08**| Hợp đồng thuê phòng | Quản lý thành viên cùng phòng | OWNER | PASS | PASS | PASS | PASS | `TenancyServiceTest.testAddContractMember_ExceedsCapacity_ThrowsException`, modal thêm thành viên kiểm tra maxTenants |
+| **CONT-09**| Hợp đồng thuê phòng | Quản lý thành viên cùng phòng trong phạm vi | STAFF | PASS | PASS | PASS | PASS | `TenancyService.addMemberToContract`, kiểm tra sức chứa phòng |
+| **CONT-10**| Hợp đồng thuê phòng | Xem danh sách thành viên cùng phòng | TENANT | PASS | PASS | PASS | PASS | `TenantPortalPage`, `ContractsScreen` chi tiết thành viên |
+| **CONT-11**| Hợp đồng thuê phòng | Trả phòng thực tế & Giải phóng phòng | OWNER | PASS | PASS | PASS | PASS | `TenancyService.checkoutContract`, chuyển trạng thái ENDED & VACANT |
+| **CONT-12**| Hợp đồng thuê phòng | Trả phòng thực tế & Giải phóng phòng | STAFF | PASS | PASS | PASS | PASS | `TenancyService.checkoutContract` |
 | **MET-01** | Đơn giá & Đo lường | Cấu hình loại dịch vụ | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
 | **MET-02** | Đơn giá & Đo lường | Thiết lập bảng đơn giá theo tháng hiệu lực | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
 | **MET-03** | Đơn giá & Đo lường | Thiết lập bảng đơn giá trong phạm vi | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
