@@ -93,7 +93,11 @@ export const AppRouter: React.FC = () => {
 
           <Route path="/invoices" element={<InvoicesPage />} />
           <Route path="/incidents" element={<IncidentsPage />} />
+          <Route path="/operations" element={<Navigate to="/incidents" replace />} />
           <Route path="/tickets" element={<Navigate to="/incidents" replace />} />
+          <Route path="/deposits" element={<Navigate to="/contracts" replace />} />
+          <Route path="/tenant/contracts" element={<Navigate to="/tenant" replace />} />
+          <Route path="/tenant/invoices" element={<Navigate to="/tenant" replace />} />
 
           <Route
             path="/users"

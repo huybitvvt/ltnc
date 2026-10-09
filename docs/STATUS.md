@@ -2,11 +2,11 @@
 
 ## Checkpoint hiện tại
 
-- Trạng thái phần mềm: NOTIFICATIONS_AND_DASHBOARDS_COMPLETE.
-- Task vừa thực hiện: F2 — Thông báo và dashboard có đối chiếu (PASS: Migration V009 + Bảng notifications có dedupe event_key uq_notification_user_event BR-136 + NotificationService + ReportingService đối chiếu tài chính chuẩn mực BR-148..BR-164 & EX-17..EX-20 + NotificationController + ReportingController + Web DashboardPage với real metrics & Broadcast dialog + Web Notification Bell badge & popover trong AppLayout + Mobile HomeScreen với Notification bell/modal & Financial summary cards + 87/87 Unit Tests đạt 100%).
-- Task tiếp theo: G1 — Hoàn thiện parity/UX hai client (Role parity review, empty states, keyboard/back, forms validation).
+- Trạng thái phần mềm: CLIENT_PARITY_AND_UX_COMPLETE.
+- Task vừa thực hiện: G1 — Hoàn thiện parity/UX hai client (PASS: Toàn bộ 100% nghiệp vụ có đầy đủ API, Web, Mobile cho 3 vai trò OWNER, STAFF, TENANT; Route aliases chống 404; Notification bell + badge + popover / modal parity; Financial reporting & dashboard parity; Empty states và form confirmations; 87/87 Unit Tests đạt 100%; Web Build & Mobile Typecheck PASS).
+- Task tiếp theo: H1 — Kiểm thử tích hợp, quyền và tính toàn vẹn (Integration tests, Docker Compose, PostgreSQL schema validation, acceptance gates).
 - Đã có:
-  - Repository Git local: commits `6d08b31` (A0), `09e9e3f` (B1), `06d491e` (B1 Status), `76e97b9` (B2 Auth), `9ac930a` (C1 Property), `d66200a` (C2 Tenancy), `5a83ea5` (D1 Pricing & Metering), `553bfdb` (D2 Invoicing), `85688bd` (E1 Payments), `ccfdaeb` (E2 Deposits), `186bd17` (E3 Checkout), `47ea9c8` (F1 Operations).
+  - Repository Git local: commits `6d08b31` (A0), `09e9e3f` (B1), `06d491e` (B1 Status), `76e97b9` (B2 Auth), `9ac930a` (C1 Property), `d66200a` (C2 Tenancy), `5a83ea5` (D1 Pricing & Metering), `553bfdb` (D2 Invoicing), `85688bd` (E1 Payments), `ccfdaeb` (E2 Deposits), `186bd17` (E3 Checkout), `47ea9c8` (F1 Operations), `0b98342` (F2 Reporting & Notifications).
   - Khóa phiên bản `docs/VERSIONS.md`, thiết kế CSDL `docs/ERD.md`, hợp đồng `docs/openapi.yaml`, ma trận `docs/FEATURE_MATRIX.md`, `README.md`.
   - Hạ tầng: `infra/compose.yaml` (PostgreSQL 16, volume, healthcheck) và `infra/.env.example`.
   - Backend:
@@ -16,7 +16,7 @@
     - Migration: `V001__identity.sql` đến `V009__notifications.sql`.
     - Unit Tests: 87/87 tests PASS (`AuthServiceTest` 7, `PropertyServiceTest` 7, `TenancyServiceTest` 12, `UserServiceTest` 3, `PricingServiceTest` 8, `MeteringServiceTest` 6, `BillingServiceTest` 9, `PaymentServiceTest` 7, `DepositServiceTest` 8, `OperationsServiceTest` 9, `NotificationServiceTest` 7, `ReportingServiceTest` 4).
   - Web:
-    - UI Components: `BuildingsPage.tsx`, `ContractsPage.tsx`, `MeteringPage.tsx`, `InvoicesPage.tsx`, `IncidentsPage.tsx`, `DashboardPage.tsx` (Bảng đối chiếu dòng tiền thực thu/hoàn/nợ/dư/cọc, thống kê phòng và dialog broadcast thông báo), `TenantPortalPage.tsx`, `AppRouter.tsx`, `AppLayout.tsx` (Notification bell badge & popover).
+    - UI Components: `BuildingsPage.tsx`, `ContractsPage.tsx`, `MeteringPage.tsx`, `InvoicesPage.tsx`, `IncidentsPage.tsx`, `DashboardPage.tsx`, `TenantPortalPage.tsx`, `AppRouter.tsx` (route aliases `/operations`, `/deposits`, `/tenant/*`), `AppLayout.tsx` (Notification bell badge & popover).
     - `typecheck` PASS, `build` PASS sinh thư mục `dist/` hoàn tất.
   - Mobile:
     - UI Screens: `PropertyScreen.tsx`, `ContractsScreen.tsx`, `MeteringScreen.tsx`, `InvoicesScreen.tsx`, `IncidentsScreen.tsx`, `HomeScreen.tsx` (Header Profile + Notification Bell badge + Modal thông báo + Cards dòng tiền/hiện trạng phòng + Modal phát thông báo), `index.tsx`.
@@ -37,10 +37,7 @@
 - [x] E3 — Checkout và hóa đơn cuối kỳ xuyên suốt. (PASS: 67 tests, Web build, Mobile typecheck)
 - [x] F1 — Sửa chữa, ảnh, phản hồi hóa đơn. (PASS: 76 tests, Web build, Mobile typecheck, migration V008)
 - [x] F2 — Thông báo và dashboard. (PASS: 87 tests, Web build, Mobile typecheck, migration V009)
-- [ ] G1 — Hoàn thiện parity/UX hai client.
-- [ ] H1 — Kiểm thử và sửa lỗi tổng thể.
-- [ ] H2 — Đóng gói, APK, README và demo.
-- [ ] G1 — Hoàn thiện parity/UX hai client.
+- [x] G1 — Hoàn thiện parity/UX hai client. (PASS: 100% role capability parity, Web Build & Mobile Typecheck PASS)
 - [ ] H1 — Kiểm thử và sửa lỗi tổng thể.
 - [ ] H2 — Đóng gói, APK, README và demo.
 
