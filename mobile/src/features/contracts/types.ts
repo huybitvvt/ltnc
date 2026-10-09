@@ -26,6 +26,8 @@ export interface ContractSummary {
   rent: string;
   depositRequired: string;
   depositHeld: string;
+  depositStatus?: 'NOT_RECEIVED' | 'HOLDING' | 'SETTLING' | 'SETTLED';
+  depositSettledAt?: string | null;
 }
 
 export interface ContractMemberResponse {

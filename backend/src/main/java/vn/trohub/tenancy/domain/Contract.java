@@ -46,6 +46,13 @@ public class Contract {
     @Column(name = "deposit_settlement_at")
     private Instant depositSettlementAt;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "deposit_status", nullable = false, length = 20)
+    private DepositStatus depositStatus = DepositStatus.NOT_RECEIVED;
+
+    @Column(name = "deposit_settled_at")
+    private Instant depositSettledAt;
+
     @Column(name = "created_at", nullable = false, updatable = false)
     private Instant createdAt = Instant.now();
 
@@ -152,6 +159,24 @@ public class Contract {
 
     public void setDepositSettlementAt(Instant depositSettlementAt) {
         this.depositSettlementAt = depositSettlementAt;
+        this.updatedAt = Instant.now();
+    }
+
+    public DepositStatus getDepositStatus() {
+        return depositStatus;
+    }
+
+    public void setDepositStatus(DepositStatus depositStatus) {
+        this.depositStatus = depositStatus;
+        this.updatedAt = Instant.now();
+    }
+
+    public Instant getDepositSettledAt() {
+        return depositSettledAt;
+    }
+
+    public void setDepositSettledAt(Instant depositSettledAt) {
+        this.depositSettledAt = depositSettledAt;
         this.updatedAt = Instant.now();
     }
 

@@ -32,10 +32,23 @@ import UpdateIcon from '@mui/icons-material/Update';
 import KeyIcon from '@mui/icons-material/Key';
 import PeopleIcon from '@mui/icons-material/People';
 import VisibilityIcon from '@mui/icons-material/Visibility';
+import PaymentsIcon from '@mui/icons-material/Payments';
+import AssignmentReturnIcon from '@mui/icons-material/AssignmentReturn';
+import BuildCircleIcon from '@mui/icons-material/BuildCircle';
+import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
+import FactCheckIcon from '@mui/icons-material/FactCheck';
+import EditIcon from '@mui/icons-material/Edit';
 import { contractsApi } from './contractsApi';
 import { BuildingItem, RoomItem } from '../property/types';
 import { ContractMemberResponse, ContractSummary, RoomMeterResponse, TenantSummary } from './types';
 import { useAuth } from '../auth/AuthContext';
+import { depositsApi } from '../deposits/depositsApi';
+import {
+  ContractDepositFinancialStatusResponse,
+  DepositLedgerEntryResponse,
+  PaymentMethod,
+} from '../deposits/types';
+import { invoicesApi } from '../invoices/invoicesApi';
 
 export const ContractsPage: React.FC = () => {
   const { user } = useAuth();
@@ -71,6 +84,51 @@ export const ContractsPage: React.FC = () => {
   const [members, setMembers] = useState<ContractMemberResponse[]>([]);
   const [roomMeters, setRoomMeters] = useState<RoomMeterResponse[]>([]);
   const [detailTab, setDetailTab] = useState(0);
+
+  // Dữ liệu tiền cọc
+  const [depositData, setDepositData] = useState<ContractDepositFinancialStatusResponse | null>(null);
+  const [depositLoading, setDepositLoading] = useState(false);
+
+  // Dialog Thu cọc
+  const [receiptOpen, setReceiptOpen] = useState(false);
+  const [receiptAmount, setReceiptAmount] = useState('');
+  const [receiptMethod, setReceiptMethod] = useState<PaymentMethod>('BANK_TRANSFER');
+  const [receiptRefCode, setReceiptRefCode] = useState('');
+  const [receiptNote, setReceiptNote] = useState('');
+  const [receiptLoading, setReceiptLoading] = useState(false);
+
+  // Dialog Sửa thu cọc
+  const [correctOpen, setCorrectOpen] = useState(false);
+  const [selectedDepositEntry, setSelectedDepositEntry] = useState<DepositLedgerEntryResponse | null>(null);
+  const [correctDelta, setCorrectDelta] = useState('');
+  const [correctReason, setCorrectReason] = useState('');
+  const [correctLoading, setCorrectLoading] = useState(false);
+
+  // Dialog Hoàn cọc
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [refundAmount, setRefundAmount] = useState('');
+  const [refundReason, setRefundReason] = useState('');
+  const [refundMethod, setRefundMethod] = useState<PaymentMethod>('BANK_TRANSFER');
+  const [refundRefCode, setRefundRefCode] = useState('');
+  const [refundLoading, setRefundLoading] = useState(false);
+
+  // Dialog Khấu trừ cọc
+  const [deductOpen, setDeductOpen] = useState(false);
+  const [deductAmount, setDeductAmount] = useState('');
+  const [deductReason, setDeductReason] = useState('');
+  const [deductExpenseRef, setDeductExpenseRef] = useState('');
+  const [deductLoading, setDeductLoading] = useState(false);
+
+  // Dialog Bù cọc vào hóa đơn
+  const [offsetOpen, setOffsetOpen] = useState(false);
+  const [offsetInvoiceId, setOffsetInvoiceId] = useState('');
+  const [offsetAmount, setOffsetAmount] = useState('');
+  const [offsetNote, setOffsetNote] = useState('');
+  const [offsetLoading, setOffsetLoading] = useState(false);
+  const [contractInvoices, setContractInvoices] = useState<any[]>([]);
+
+  // Quyết toán cọc
+  const [settling, setSettling] = useState(false);
 
   // Kích hoạt nhận phòng (Handover)
   const [activateOpen, setActivateOpen] = useState(false);
@@ -113,14 +171,12 @@ export const ContractsPage: React.FC = () => {
     loadData();
   }, [statusFilter]);
 
-  // Khi chọn tòa nhà trong modal tạo hợp đồng, load các phòng
   useEffect(() => {
     if (!selectedBuildingId) {
       setAvailableRooms([]);
       return;
     }
     contractsApi.listRooms(selectedBuildingId).then((rooms: RoomItem[]) => {
-      // Lọc phòng bookable và chưa có người ở
       const bookable = rooms.filter((r: RoomItem) => r.bookable && r.status === 'VACANT');
       setAvailableRooms(bookable);
       if (bookable.length > 0) {
@@ -133,12 +189,15 @@ export const ContractsPage: React.FC = () => {
     });
   }, [selectedBuildingId]);
 
-  const handleRoomChange = (roomId: string) => {
-    setSelectedRoomId(roomId);
-    const r = availableRooms.find((rm: RoomItem) => rm.id === roomId);
-    if (r) {
-      setRentPrice(String(r.basePrice));
-      setDepositAmount(String(r.depositAmount));
+  const loadDepositData = async (contractId: string) => {
+    try {
+      setDepositLoading(true);
+      const data = await depositsApi.getContractDepositStatus(contractId);
+      setDepositData(data);
+    } catch (err: unknown) {
+      console.warn('Không tải được sổ cọc:', err);
+    } finally {
+      setDepositLoading(false);
     }
   };
 
@@ -153,8 +212,18 @@ export const ContractsPage: React.FC = () => {
       ]);
       setMembers(membersData);
       setRoomMeters(metersData);
+      loadDepositData(c.id);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Không thể tải thông tin chi tiết hợp đồng');
+    }
+  };
+
+  const handleRoomChange = (roomId: string) => {
+    setSelectedRoomId(roomId);
+    const room = availableRooms.find((r) => r.id === roomId);
+    if (room) {
+      setRentPrice(String(room.basePrice));
+      setDepositAmount(String(room.depositAmount));
     }
   };
 
@@ -280,6 +349,220 @@ export const ContractsPage: React.FC = () => {
     }
   };
 
+  // --- Thao tác Cọc ---
+  const handleRecordReceipt = async () => {
+    if (!activeContract) return;
+    const amountNum = parseFloat(receiptAmount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      alert('Số tiền thu cọc phải lớn hơn 0');
+      return;
+    }
+    setReceiptLoading(true);
+    try {
+      await depositsApi.recordReceipt(
+        {
+          contractId: activeContract.id,
+          amount: String(amountNum),
+          paymentMethod: receiptMethod,
+          referenceCode: receiptRefCode.trim() || undefined,
+          note: receiptNote.trim() || undefined,
+        },
+        `DEP-REC-${activeContract.id}-${Date.now()}`
+      );
+      setSuccess('Đã ghi nhận thu cọc thành công!');
+      setReceiptOpen(false);
+      setReceiptAmount('');
+      setReceiptRefCode('');
+      setReceiptNote('');
+      await loadDepositData(activeContract.id);
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Lỗi khi ghi nhận thu cọc');
+    } finally {
+      setReceiptLoading(false);
+    }
+  };
+
+  const handleCorrectReceipt = async () => {
+    if (!selectedDepositEntry || !activeContract) return;
+    const deltaNum = parseFloat(correctDelta);
+    if (isNaN(deltaNum) || deltaNum === 0) {
+      alert('Số tiền delta điều chỉnh phải khác 0');
+      return;
+    }
+    if (!correctReason.trim()) {
+      alert('Vui lòng nhập lý do sửa thu cọc');
+      return;
+    }
+    setCorrectLoading(true);
+    try {
+      await depositsApi.correctReceipt(
+        {
+          refEntryId: selectedDepositEntry.id,
+          deltaAmount: String(deltaNum),
+          reason: correctReason.trim(),
+        },
+        `DEP-CORR-${selectedDepositEntry.id}-${Date.now()}`
+      );
+      setSuccess('Đã điều chỉnh phiếu thu cọc thành công!');
+      setCorrectOpen(false);
+      setSelectedDepositEntry(null);
+      setCorrectDelta('');
+      setCorrectReason('');
+      await loadDepositData(activeContract.id);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Lỗi khi sửa thu cọc');
+    } finally {
+      setCorrectLoading(false);
+    }
+  };
+
+  const handleRefundDeposit = async () => {
+    if (!activeContract) return;
+    const amountNum = parseFloat(refundAmount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      alert('Số tiền hoàn phải lớn hơn 0');
+      return;
+    }
+    if (!refundReason.trim()) {
+      alert('Vui lòng nhập lý do hoàn tiền cọc');
+      return;
+    }
+    setRefundLoading(true);
+    try {
+      await depositsApi.refundDeposit(
+        {
+          contractId: activeContract.id,
+          amount: String(amountNum),
+          reason: refundReason.trim(),
+          paymentMethod: refundMethod,
+          referenceCode: refundRefCode.trim() || undefined,
+        },
+        `DEP-REF-${activeContract.id}-${Date.now()}`
+      );
+      setSuccess('Đã hoàn tiền cọc thành công!');
+      setRefundOpen(false);
+      setRefundAmount('');
+      setRefundReason('');
+      setRefundRefCode('');
+      await loadDepositData(activeContract.id);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Lỗi khi hoàn tiền cọc');
+    } finally {
+      setRefundLoading(false);
+    }
+  };
+
+  const handleDeductDeposit = async () => {
+    if (!activeContract) return;
+    const amountNum = parseFloat(deductAmount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      alert('Số tiền khấu trừ phải lớn hơn 0');
+      return;
+    }
+    if (!deductReason.trim()) {
+      alert('Vui lòng nhập lý do khấu trừ tiền cọc');
+      return;
+    }
+    setDeductLoading(true);
+    try {
+      await depositsApi.deductDeposit(
+        {
+          contractId: activeContract.id,
+          amount: String(amountNum),
+          reason: deductReason.trim(),
+          expenseRef: deductExpenseRef.trim() || undefined,
+        },
+        `DEP-DED-${activeContract.id}-${Date.now()}`
+      );
+      setSuccess('Đã khấu trừ tiền cọc thành công!');
+      setDeductOpen(false);
+      setDeductAmount('');
+      setDeductReason('');
+      setDeductExpenseRef('');
+      await loadDepositData(activeContract.id);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Lỗi khi khấu trừ tiền cọc');
+    } finally {
+      setDeductLoading(false);
+    }
+  };
+
+  const handleOpenOffsetDialog = async () => {
+    if (!activeContract) return;
+    try {
+      const invData = await invoicesApi.listInvoices({ contractId: activeContract.id, status: 'ISSUED' });
+      const unpaidInvs = (invData.content || []).filter((i: any) => parseFloat(i.debt) > 0);
+      setContractInvoices(unpaidInvs);
+      if (unpaidInvs.length > 0) {
+        setOffsetInvoiceId(unpaidInvs[0].id);
+        const maxOffset = Math.min(
+          parseFloat(depositData?.depositHeld || '0'),
+          parseFloat(unpaidInvs[0].debt)
+        );
+        setOffsetAmount(String(maxOffset));
+      } else {
+        setOffsetInvoiceId('');
+        setOffsetAmount('');
+      }
+      setOffsetOpen(true);
+    } catch (err: any) {
+      alert('Không tải được danh sách hóa đơn còn nợ');
+    }
+  };
+
+  const handleOffsetToInvoice = async () => {
+    if (!activeContract || !offsetInvoiceId) return;
+    const amountNum = parseFloat(offsetAmount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      alert('Số tiền bù cọc phải lớn hơn 0');
+      return;
+    }
+    setOffsetLoading(true);
+    try {
+      await depositsApi.offsetToInvoice(
+        {
+          contractId: activeContract.id,
+          invoiceId: offsetInvoiceId,
+          amount: String(amountNum),
+          note: offsetNote.trim() || undefined,
+        },
+        `DEP-OFF-${activeContract.id}-${offsetInvoiceId}-${Date.now()}`
+      );
+      setSuccess('Đã bù trừ tiền cọc vào hóa đơn thành công!');
+      setOffsetOpen(false);
+      setOffsetInvoiceId('');
+      setOffsetAmount('');
+      setOffsetNote('');
+      await loadDepositData(activeContract.id);
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Lỗi khi bù cọc vào hóa đơn');
+    } finally {
+      setOffsetLoading(false);
+    }
+  };
+
+  const handleSettleDeposit = async () => {
+    if (!activeContract) return;
+    if (!window.confirm('Bạn có chắc chắn muốn xác nhận quyết toán cọc (SETTLED)? Thao tác này sẽ chốt dứt điểm tiền cọc của hợp đồng.')) {
+      return;
+    }
+    setSettling(true);
+    try {
+      await depositsApi.settleDeposit(
+        { contractId: activeContract.id, note: 'Quyết toán hoàn tất' },
+        `DEP-SETTLE-${activeContract.id}-${Date.now()}`
+      );
+      setSuccess('Đã xác nhận quyết toán cọc thành công (SETTLED)!');
+      await loadDepositData(activeContract.id);
+      loadData();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Lỗi khi xác nhận quyết toán cọc');
+    } finally {
+      setSettling(false);
+    }
+  };
+
   const formatMoney = (val?: string) => {
     if (!val) return '0 ₫';
     return Number(val).toLocaleString('vi-VN') + ' ₫';
@@ -298,6 +581,21 @@ export const ContractsPage: React.FC = () => {
     }
   };
 
+  const getDepositStatusChip = (status?: string) => {
+    switch (status) {
+      case 'NOT_RECEIVED':
+        return <Chip label="Chưa nhận cọc" color="default" size="small" />;
+      case 'HOLDING':
+        return <Chip label="Đang giữ cọc" color="primary" size="small" sx={{ fontWeight: 700 }} />;
+      case 'SETTLING':
+        return <Chip label="Chờ quyết toán" color="warning" size="small" sx={{ fontWeight: 700 }} />;
+      case 'SETTLED':
+        return <Chip label="Đã quyết toán (SETTLED)" color="success" size="small" sx={{ fontWeight: 700 }} />;
+      default:
+        return <Chip label={status || 'N/A'} size="small" />;
+    }
+  };
+
   const isManager = user?.role === 'OWNER' || user?.role === 'STAFF';
 
   return (
@@ -309,7 +607,7 @@ export const ContractsPage: React.FC = () => {
             Quản lý Hợp đồng & Cư dân
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Theo dõi vòng đời hợp đồng DRAFT → ACTIVE → ENDED, bàn giao điện nước và quản lý thành viên cư trú
+            Theo dõi vòng đời hợp đồng, sổ cọc bất biến, quyết toán hoàn cọc/khấu trừ và thành viên cư trú
           </Typography>
         </Box>
         {isManager && (
@@ -382,7 +680,7 @@ export const ContractsPage: React.FC = () => {
                   <TableCell sx={{ fontWeight: 700 }}>Người đại diện</TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>Thời hạn thuê</TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>Giá thuê / tháng</TableCell>
-                  <TableCell sx={{ fontWeight: 700 }}>Tiền cọc</TableCell>
+                  <TableCell sx={{ fontWeight: 700 }}>Cọc quy định</TableCell>
                   <TableCell sx={{ fontWeight: 700 }}>Trạng thái</TableCell>
                   <TableCell align="right" sx={{ fontWeight: 700 }}>Thao tác</TableCell>
                 </TableRow>
@@ -432,7 +730,7 @@ export const ContractsPage: React.FC = () => {
                         onClick={() => handleOpenDetail(c)}
                         sx={{ borderRadius: 2 }}
                       >
-                        Chi tiết
+                        Chi tiết & Sổ cọc
                       </Button>
                     </TableCell>
                   </TableRow>
@@ -452,13 +750,14 @@ export const ContractsPage: React.FC = () => {
               <TextField
                 select
                 fullWidth
-                label="Chọn Tòa nhà"
+                label="Chọn Tòa Nhà"
+                required
                 value={selectedBuildingId}
                 onChange={(e) => setSelectedBuildingId(e.target.value)}
               >
                 {buildings.map((b) => (
                   <MenuItem key={b.id} value={b.id}>
-                    {b.name} ({b.address})
+                    {b.name} - {b.address}
                   </MenuItem>
                 ))}
               </TextField>
@@ -467,15 +766,16 @@ export const ContractsPage: React.FC = () => {
               <TextField
                 select
                 fullWidth
-                label="Chọn Phòng trống"
+                label="Chọn Phòng Trống"
+                required
+                disabled={!selectedBuildingId || availableRooms.length === 0}
                 value={selectedRoomId}
                 onChange={(e) => handleRoomChange(e.target.value)}
-                disabled={availableRooms.length === 0}
-                helperText={availableRooms.length === 0 ? 'Không có phòng trống sẵn sàng' : ''}
+                helperText={availableRooms.length === 0 && selectedBuildingId ? 'Tòa nhà này không còn phòng trống' : ''}
               >
                 {availableRooms.map((r) => (
                   <MenuItem key={r.id} value={r.id}>
-                    Phòng {r.roomNumber} (Sức chứa: {r.maxTenants} người - Giá: {formatMoney(String(r.basePrice))})
+                    Phòng {r.roomNumber} ({formatMoney(String(r.basePrice))}/tháng)
                   </MenuItem>
                 ))}
               </TextField>
@@ -483,12 +783,12 @@ export const ContractsPage: React.FC = () => {
 
             <Grid item xs={12}>
               <Divider sx={{ my: 1 }} />
-              <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
+              <Stack direction="row" justifyContent="space-between" alignItems="center">
                 <Typography variant="subtitle2" fontWeight={700}>
-                  Người Đại Diện Thuê Phòng
+                  Người Đại Diện Ký Hợp Đồng
                 </Typography>
                 <Button size="small" onClick={() => setIsNewTenantMode(!isNewTenantMode)}>
-                  {isNewTenantMode ? 'Chọn người thuê đã có' : '+ Tạo người thuê mới'}
+                  {isNewTenantMode ? 'Chọn hồ sơ có sẵn' : '+ Tạo hồ sơ khách mới'}
                 </Button>
               </Stack>
             </Grid>
@@ -498,7 +798,8 @@ export const ContractsPage: React.FC = () => {
                 <TextField
                   select
                   fullWidth
-                  label="Hồ sơ người đại diện"
+                  label="Chọn Người Thuê Có Sẵn"
+                  required
                   value={selectedTenantId}
                   onChange={(e) => setSelectedTenantId(e.target.value)}
                 >
@@ -607,8 +908,8 @@ export const ContractsPage: React.FC = () => {
         </DialogActions>
       </Dialog>
 
-      {/* Modal Chi Tiết Hợp Đồng & Bàn Giao */}
-      <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+      {/* Modal Chi Tiết Hợp Đồng, Bàn Giao & Sổ Cọc */}
+      <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} maxWidth="lg" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
         <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>
           Chi Tiết Hợp Đồng - Phòng {activeContract?.roomNumber} ({activeContract?.buildingName})
         </DialogTitle>
@@ -616,7 +917,7 @@ export const ContractsPage: React.FC = () => {
           {activeContract && (
             <Box>
               {/* Header Badge */}
-              <Stack direction="row" spacing={2} alignItems="center" mb={2}>
+              <Stack direction="row" spacing={2} alignItems="center" mb={2} flexWrap="wrap">
                 {getStatusChip(activeContract.status)}
                 <Typography variant="body2" color="text.secondary">
                   Thời hạn: <strong>{activeContract.actualStartDate}</strong> đến <strong>{activeContract.plannedEndExclusive}</strong>
@@ -680,8 +981,10 @@ export const ContractsPage: React.FC = () => {
               <Tabs value={detailTab} onChange={(_, v) => setDetailTab(v)} sx={{ mb: 2 }}>
                 <Tab label={`Thành viên cùng phòng (${members.length})`} sx={{ fontWeight: 700 }} />
                 <Tab label="Đồng hồ & Chỉ số" sx={{ fontWeight: 700 }} />
+                <Tab label="Quản lý Cọc & Quyết Toán (Sổ cọc)" sx={{ fontWeight: 700 }} />
               </Tabs>
 
+              {/* TAB 0: Thành viên */}
               {detailTab === 0 && (
                 <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #e0e0e0', borderRadius: 2 }}>
                   <Table size="small">
@@ -715,6 +1018,7 @@ export const ContractsPage: React.FC = () => {
                 </TableContainer>
               )}
 
+              {/* TAB 1: Đồng hồ */}
               {detailTab === 1 && (
                 <Box>
                   <Typography variant="subtitle2" fontWeight={700} mb={1}>
@@ -742,6 +1046,237 @@ export const ContractsPage: React.FC = () => {
                         </Paper>
                       ))}
                     </Stack>
+                  )}
+                </Box>
+              )}
+
+              {/* TAB 2: Quản lý Cọc & Quyết Toán (BR-105..BR-122) */}
+              {detailTab === 2 && (
+                <Box>
+                  {depositLoading ? (
+                    <Box sx={{ display: 'flex', justifyContent: 'center', p: 4 }}>
+                      <CircularProgress />
+                    </Box>
+                  ) : (
+                    <>
+                      {/* Thẻ thống kê số dư cọc */}
+                      <Grid container spacing={2} mb={3}>
+                        <Grid item xs={12} sm={3}>
+                          <Paper sx={{ p: 2, bgcolor: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 2 }}>
+                            <Typography variant="caption" color="text.secondary">
+                              Cọc thỏa thuận:
+                            </Typography>
+                            <Typography variant="h6" fontWeight={800} color="#0f172a">
+                              {formatMoney(depositData?.depositRequired)}
+                            </Typography>
+                            <Box mt={0.5}>{getDepositStatusChip(depositData?.depositStatus)}</Box>
+                          </Paper>
+                        </Grid>
+                        <Grid item xs={12} sm={3}>
+                          <Paper sx={{ p: 2, bgcolor: '#f0fdf4', border: '1px solid #bbf7d0', borderRadius: 2 }}>
+                            <Typography variant="caption" color="text.secondary">
+                              Cọc đang giữ (Held):
+                            </Typography>
+                            <Typography variant="h6" fontWeight={800} color="#16a34a">
+                              {formatMoney(depositData?.depositHeld)}
+                            </Typography>
+                            <Typography variant="caption" color="#16a34a">
+                              Đã thu thực: {formatMoney(depositData?.totalReceipt)}
+                            </Typography>
+                          </Paper>
+                        </Grid>
+                        <Grid item xs={12} sm={3}>
+                          <Paper sx={{ p: 2, bgcolor: '#fefce8', border: '1px solid #fef08a', borderRadius: 2 }}>
+                            <Typography variant="caption" color="text.secondary">
+                              Đã hoàn lại khách:
+                            </Typography>
+                            <Typography variant="h6" fontWeight={800} color="#ca8a04">
+                              {formatMoney(depositData?.totalRefund)}
+                            </Typography>
+                            <Typography variant="caption" color="text.secondary">
+                              Bù nợ HĐ: {formatMoney(depositData?.totalOffset)}
+                            </Typography>
+                          </Paper>
+                        </Grid>
+                        <Grid item xs={12} sm={3}>
+                          <Paper sx={{ p: 2, bgcolor: '#fef2f2', border: '1px solid #fecaca', borderRadius: 2 }}>
+                            <Typography variant="caption" color="text.secondary">
+                              Đã khấu trừ hư hại/phạt:
+                            </Typography>
+                            <Typography variant="h6" fontWeight={800} color="#dc2626">
+                              {formatMoney(depositData?.totalDeduction)}
+                            </Typography>
+                            {depositData?.settledAt && (
+                              <Typography variant="caption" color="#059669" display="block">
+                                Quyết toán: {new Date(depositData.settledAt).toLocaleDateString('vi-VN')}
+                              </Typography>
+                            )}
+                          </Paper>
+                        </Grid>
+                      </Grid>
+
+                      {/* Action buttons cho quản lý */}
+                      {isManager && depositData?.depositStatus !== 'SETTLED' && (
+                        <Stack direction="row" spacing={1} flexWrap="wrap" mb={2}>
+                          <Button
+                            variant="contained"
+                            color="primary"
+                            startIcon={<PaymentsIcon />}
+                            onClick={() => {
+                              setReceiptAmount(depositData ? depositData.depositRequired : '');
+                              setReceiptOpen(true);
+                            }}
+                          >
+                            Thu Tiền Cọc
+                          </Button>
+
+                          {parseFloat(depositData?.depositHeld || '0') > 0 && (
+                            <>
+                              <Button
+                                variant="outlined"
+                                color="warning"
+                                startIcon={<AssignmentReturnIcon />}
+                                onClick={() => {
+                                  setRefundAmount(depositData?.depositHeld || '');
+                                  setRefundOpen(true);
+                                }}
+                              >
+                                Hoàn Tiền Cọc
+                              </Button>
+
+                              <Button
+                                variant="outlined"
+                                color="error"
+                                startIcon={<BuildCircleIcon />}
+                                onClick={() => setDeductOpen(true)}
+                              >
+                                Khấu Trừ Hư Hại / Phạt
+                              </Button>
+
+                              <Button
+                                variant="outlined"
+                                color="info"
+                                startIcon={<SwapHorizIcon />}
+                                onClick={handleOpenOffsetDialog}
+                              >
+                                Bù Nợ Hóa Đơn
+                              </Button>
+                            </>
+                          )}
+
+                          {activeContract.status === 'ENDED' &&
+                            parseFloat(depositData?.depositHeld || '0') === 0 && (
+                              <Button
+                                variant="contained"
+                                color="success"
+                                startIcon={<FactCheckIcon />}
+                                loading={settling}
+                                onClick={handleSettleDeposit}
+                              >
+                                Xác Nhận Quyết Toán Cọc (SETTLED)
+                              </Button>
+                            )}
+                        </Stack>
+                      )}
+
+                      {/* Bảng sổ cọc (deposit ledger entries) */}
+                      <Typography variant="subtitle2" fontWeight={700} mb={1}>
+                        Sổ Cái Bút Toán Cọc (Audit Ledger - Append-Only)
+                      </Typography>
+                      {!depositData || depositData.entries.length === 0 ? (
+                        <Typography variant="body2" color="text.secondary" sx={{ fontStyle: 'italic', p: 2 }}>
+                          Chưa có bút toán cọc nào được ghi nhận.
+                        </Typography>
+                      ) : (
+                        <TableContainer component={Paper} elevation={0} sx={{ border: '1px solid #e0e0e0', borderRadius: 2 }}>
+                          <Table size="small">
+                            <TableHead sx={{ backgroundColor: 'rgba(0,0,0,0.02)' }}>
+                              <TableRow>
+                                <TableCell sx={{ fontWeight: 700 }}>Loại bút toán</TableCell>
+                                <TableCell sx={{ fontWeight: 700 }}>Số tiền</TableCell>
+                                <TableCell sx={{ fontWeight: 700 }}>Hình thức / Mã GD</TableCell>
+                                <TableCell sx={{ fontWeight: 700 }}>Lý do & Ghi chú</TableCell>
+                                <TableCell sx={{ fontWeight: 700 }}>Người lập & Ngày ghi</TableCell>
+                                {isManager && depositData.depositStatus !== 'SETTLED' && (
+                                  <TableCell align="right" sx={{ fontWeight: 700 }}>Thao tác</TableCell>
+                                )}
+                              </TableRow>
+                            </TableHead>
+                            <TableBody>
+                              {depositData.entries.map((entry) => {
+                                const isNeg = parseFloat(entry.amount) < 0;
+                                return (
+                                  <TableRow key={entry.id} hover>
+                                    <TableCell>
+                                      <Chip
+                                        label={entry.entryType}
+                                        size="small"
+                                        color={
+                                          entry.entryType === 'RECEIPT'
+                                            ? 'success'
+                                            : entry.entryType === 'RECEIPT_CORRECTION'
+                                            ? 'primary'
+                                            : entry.entryType === 'REFUND'
+                                            ? 'warning'
+                                            : entry.entryType === 'DEDUCTION'
+                                            ? 'error'
+                                            : 'info'
+                                        }
+                                      />
+                                    </TableCell>
+                                    <TableCell sx={{ fontWeight: 700, color: isNeg ? '#dc2626' : '#16a34a' }}>
+                                      {!isNeg ? '+' : ''}{formatMoney(entry.amount)}
+                                    </TableCell>
+                                    <TableCell>
+                                      {entry.paymentMethod && <span>{entry.paymentMethod} </span>}
+                                      {entry.referenceCode && (
+                                        <Typography variant="caption" color="text.secondary" display="block">
+                                          Mã: {entry.referenceCode}
+                                        </Typography>
+                                      )}
+                                    </TableCell>
+                                    <TableCell>
+                                      {entry.reason && <span>{entry.reason} </span>}
+                                      {entry.note && (
+                                        <Typography variant="caption" color="text.secondary" display="block">
+                                          Ghi chú: {entry.note}
+                                        </Typography>
+                                      )}
+                                    </TableCell>
+                                    <TableCell>
+                                      <Typography variant="caption" display="block">
+                                        {entry.actorName || 'Hệ thống'}
+                                      </Typography>
+                                      <Typography variant="caption" color="text.secondary">
+                                        {new Date(entry.recordedAt).toLocaleString('vi-VN')}
+                                      </Typography>
+                                    </TableCell>
+                                    {isManager && depositData.depositStatus !== 'SETTLED' && (
+                                      <TableCell align="right">
+                                        {entry.entryType === 'RECEIPT' && (
+                                          <Button
+                                            size="small"
+                                            startIcon={<EditIcon />}
+                                            onClick={() => {
+                                              setSelectedDepositEntry(entry);
+                                              setCorrectDelta('');
+                                              setCorrectReason('');
+                                              setCorrectOpen(true);
+                                            }}
+                                          >
+                                            Sửa thu
+                                          </Button>
+                                        )}
+                                      </TableCell>
+                                    )}
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </TableContainer>
+                      )}
+                    </>
                   )}
                 </Box>
               )}
@@ -859,6 +1394,248 @@ export const ContractsPage: React.FC = () => {
           <Button variant="contained" onClick={handleAddMember} sx={{ fontWeight: 700 }}>
             Thêm Thành Viên
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog Thu Tiền Cọc */}
+      <Dialog open={receiptOpen} onClose={() => setReceiptOpen(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+        <DialogTitle sx={{ fontWeight: 700 }}>Ghi Nhận Thu Tiền Cọc</DialogTitle>
+        <DialogContent dividers>
+          <TextField
+            fullWidth
+            type="number"
+            label="Số tiền thu cọc (VND) *"
+            required
+            value={receiptAmount}
+            onChange={(e) => setReceiptAmount(e.target.value)}
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            select
+            fullWidth
+            label="Hình thức thanh toán"
+            value={receiptMethod}
+            onChange={(e) => setReceiptMethod(e.target.value as PaymentMethod)}
+            sx={{ mb: 2 }}
+          >
+            <MenuItem value="BANK_TRANSFER">Chuyển khoản ngân hàng</MenuItem>
+            <MenuItem value="CASH">Tiền mặt</MenuItem>
+            <MenuItem value="MOMO">Ví MoMo</MenuItem>
+            <MenuItem value="VNPAY">VNPAY</MenuItem>
+          </TextField>
+          <TextField
+            fullWidth
+            label="Mã giao dịch / UNC (nếu có)"
+            value={receiptRefCode}
+            onChange={(e) => setReceiptRefCode(e.target.value)}
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            fullWidth
+            label="Ghi chú thêm"
+            value={receiptNote}
+            onChange={(e) => setReceiptNote(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setReceiptOpen(false)}>Hủy</Button>
+          <Button variant="contained" loading={receiptLoading} onClick={handleRecordReceipt} sx={{ fontWeight: 700 }}>
+            Xác Nhận Thu Cọc
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog Sửa Thu Cọc (Delta Correction) */}
+      <Dialog open={correctOpen} onClose={() => setCorrectOpen(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+        <DialogTitle sx={{ fontWeight: 700 }}>Sửa Phiếu Thu Cọc (Delta)</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" color="text.secondary" mb={2}>
+            Bút toán gốc: <strong>{formatMoney(selectedDepositEntry?.amount)}</strong>
+          </Typography>
+          <TextField
+            fullWidth
+            type="number"
+            label="Số tiền chênh lệch delta (VND) *"
+            required
+            placeholder="VD: -500000 hoặc 500000"
+            value={correctDelta}
+            onChange={(e) => setCorrectDelta(e.target.value)}
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            fullWidth
+            multiline
+            rows={2}
+            label="Lý do sửa thu cọc *"
+            required
+            value={correctReason}
+            onChange={(e) => setCorrectReason(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setCorrectOpen(false)}>Hủy</Button>
+          <Button variant="contained" loading={correctLoading} onClick={handleCorrectReceipt} sx={{ fontWeight: 700 }}>
+            Lưu Điều Chỉnh
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog Hoàn Cọc */}
+      <Dialog open={refundOpen} onClose={() => setRefundOpen(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+        <DialogTitle sx={{ fontWeight: 700 }}>Hoàn Trả Tiền Cọc</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" color="#16a34a" fontWeight={700} mb={2}>
+            Cọc tối đa có thể hoàn: {formatMoney(depositData?.depositHeld)}
+          </Typography>
+          <TextField
+            fullWidth
+            type="number"
+            label="Số tiền hoàn (VND) *"
+            required
+            value={refundAmount}
+            onChange={(e) => setRefundAmount(e.target.value)}
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            select
+            fullWidth
+            label="Hình thức hoàn trả"
+            value={refundMethod}
+            onChange={(e) => setRefundMethod(e.target.value as PaymentMethod)}
+            sx={{ mb: 2 }}
+          >
+            <MenuItem value="BANK_TRANSFER">Chuyển khoản</MenuItem>
+            <MenuItem value="CASH">Tiền mặt</MenuItem>
+          </TextField>
+          <TextField
+            fullWidth
+            label="Mã giao dịch chuyển hoàn"
+            value={refundRefCode}
+            onChange={(e) => setRefundRefCode(e.target.value)}
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            fullWidth
+            multiline
+            rows={2}
+            label="Lý do hoàn trả (Bắt buộc) *"
+            required
+            value={refundReason}
+            onChange={(e) => setRefundReason(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setRefundOpen(false)}>Hủy</Button>
+          <Button variant="contained" color="warning" loading={refundLoading} onClick={handleRefundDeposit} sx={{ fontWeight: 700 }}>
+            Xác Nhận Hoàn Cọc
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog Khấu Trừ Cọc */}
+      <Dialog open={deductOpen} onClose={() => setDeductOpen(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+        <DialogTitle sx={{ fontWeight: 700 }}>Khấu Trừ Tiền Cọc</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" color="#dc2626" fontWeight={700} mb={2}>
+            Cọc khả dụng: {formatMoney(depositData?.depositHeld)}
+          </Typography>
+          <TextField
+            fullWidth
+            type="number"
+            label="Số tiền khấu trừ (VND) *"
+            required
+            value={deductAmount}
+            onChange={(e) => setDeductAmount(e.target.value)}
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            fullWidth
+            label="Mã chi phí / sự cố sửa chữa (nếu có)"
+            value={deductExpenseRef}
+            onChange={(e) => setDeductExpenseRef(e.target.value)}
+            sx={{ mb: 2 }}
+          />
+          <TextField
+            fullWidth
+            multiline
+            rows={2}
+            label="Lý do khấu trừ (Hư hại tài sản / phạt) *"
+            required
+            value={deductReason}
+            onChange={(e) => setDeductReason(e.target.value)}
+          />
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setDeductOpen(false)}>Hủy</Button>
+          <Button variant="contained" color="error" loading={deductLoading} onClick={handleDeductDeposit} sx={{ fontWeight: 700 }}>
+            Xác Nhận Khấu Trừ
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog Bù Cọc Vào Hóa Đơn */}
+      <Dialog open={offsetOpen} onClose={() => setOffsetOpen(false)} maxWidth="xs" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+        <DialogTitle sx={{ fontWeight: 700 }}>Bù Trừ Cọc Vào Hóa Đơn Nợ</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" color="#0284c7" fontWeight={700} mb={2}>
+            Cọc khả dụng: {formatMoney(depositData?.depositHeld)}
+          </Typography>
+          {contractInvoices.length === 0 ? (
+            <Typography variant="body2" color="text.secondary">
+              Hợp đồng này hiện không có hóa đơn nào còn nợ tiền.
+            </Typography>
+          ) : (
+            <>
+              <TextField
+                select
+                fullWidth
+                label="Chọn hóa đơn còn nợ"
+                required
+                value={offsetInvoiceId}
+                onChange={(e) => {
+                  setOffsetInvoiceId(e.target.value);
+                  const selectedInv = contractInvoices.find((inv) => inv.id === e.target.value);
+                  if (selectedInv) {
+                    const maxOffset = Math.min(
+                      parseFloat(depositData?.depositHeld || '0'),
+                      parseFloat(selectedInv.debt)
+                    );
+                    setOffsetAmount(String(maxOffset));
+                  }
+                }}
+                sx={{ mb: 2 }}
+              >
+                {contractInvoices.map((inv) => (
+                  <MenuItem key={inv.id} value={inv.id}>
+                    Kỳ {inv.billingMonth} - Còn nợ: {formatMoney(inv.debt)}
+                  </MenuItem>
+                ))}
+              </TextField>
+              <TextField
+                fullWidth
+                type="number"
+                label="Số tiền bù cọc (VND) *"
+                required
+                value={offsetAmount}
+                onChange={(e) => setOffsetAmount(e.target.value)}
+                sx={{ mb: 2 }}
+              />
+              <TextField
+                fullWidth
+                label="Ghi chú thêm"
+                value={offsetNote}
+                onChange={(e) => setOffsetNote(e.target.value)}
+              />
+            </>
+          )}
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setOffsetOpen(false)}>Hủy</Button>
+          {contractInvoices.length > 0 && (
+            <Button variant="contained" color="info" loading={offsetLoading} onClick={handleOffsetToInvoice} sx={{ fontWeight: 700 }}>
+              Xác Nhận Bù Cọc
+            </Button>
+          )}
         </DialogActions>
       </Dialog>
     </Box>

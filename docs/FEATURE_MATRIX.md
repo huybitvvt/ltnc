@@ -67,14 +67,14 @@ Trạng thái hợp lệ cho các cột: `NOT_STARTED`, `IN_PROGRESS`, `PASS`, `
 | **PAY-07** | Thu tiền & Sổ cái | Chuyển tiền dư giữa 2 hóa đơn cùng hợp đồng| OWNER | PASS | PASS | PASS | PASS | `PaymentServiceTest.testTransferCredit_EX13`, `PaymentService.transferCredit`, đối trừ 2 entries |
 | **PAY-08** | Thu tiền & Sổ cái | Chuyển tiền dư giữa 2 hóa đơn cùng hợp đồng| STAFF | PASS | PASS | PASS | PASS | `PaymentService.transferCredit`, modal chuyển dư bù nợ trên Web InvoicesPage |
 | **PAY-09** | Thu tiền & Sổ cái | Xem lịch sử thanh toán hóa đơn của mình | TENANT | PASS | PASS | PASS | PASS | `/api/v1/invoices/{id}/financial-status`, danh sách bút toán sổ cái trên Web & Mobile |
-| **DEP-01** | Tiền cọc & Quyết toán| Ghi nhận thu tiền cọc | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **DEP-02** | Tiền cọc & Quyết toán| Ghi nhận thu tiền cọc trong phạm vi | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **DEP-03** | Tiền cọc & Quyết toán| Sửa sai khoản thu cọc | OWNER/STAFF| NOT_STARTED| NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **DEP-04** | Tiền cọc & Quyết toán| Hoàn trả tiền cọc | OWNER/STAFF| NOT_STARTED| NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **DEP-05** | Tiền cọc & Quyết toán| Khấu trừ tiền cọc do hư hại thiết bị | OWNER/STAFF| NOT_STARTED| NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **DEP-06** | Tiền cọc & Quyết toán| Bù trừ tiền cọc sang thanh toán hóa đơn | OWNER/STAFF| NOT_STARTED| NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **DEP-07** | Tiền cọc & Quyết toán| Xác nhận hoàn tất quyết toán cọc (SETTLED) | OWNER/STAFF| NOT_STARTED| NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **DEP-08** | Tiền cọc & Quyết toán| Xem số dư cọc & lịch sử cọc của mình | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **DEP-01** | Tiền cọc & Quyết toán| Ghi nhận thu tiền cọc | OWNER | PASS | PASS | PASS | PASS | `DepositServiceTest.testRecordDepositReceipt_Success`, `DepositService.recordDepositReceipt`, Web `ContractsPage` & Mobile `ContractsScreen` |
+| **DEP-02** | Tiền cọc & Quyết toán| Ghi nhận thu tiền cọc trong phạm vi | STAFF | PASS | PASS | PASS | PASS | `DepositService.recordDepositReceipt`, kiểm tra quyền tòa nhà |
+| **DEP-03** | Tiền cọc & Quyết toán| Sửa sai khoản thu cọc (RECEIPT_CORRECTION)| OWNER/STAFF| PASS | PASS | PASS | PASS | `DepositServiceTest.testCorrectDepositReceipt_DeltaCorrection`, delta correction, chặn âm số dư |
+| **DEP-04** | Tiền cọc & Quyết toán| Hoàn trả tiền cọc (REFUND) | OWNER/STAFF| PASS | PASS | PASS | PASS | `DepositServiceTest.testRefundDeposit_ExceedsHeld_ThrowsException_EX15`, `DepositService.refundDeposit` |
+| **DEP-05** | Tiền cọc & Quyết toán| Khấu trừ tiền cọc do hư hại thiết bị (DEDUCTION) | OWNER/STAFF| PASS | PASS | PASS | PASS | `DepositServiceTest.testDeductDeposit_Success`, `DepositService.deductDeposit`, gắn lý do và ref chi phí |
+| **DEP-06** | Tiền cọc & Quyết toán| Bù trừ tiền cọc sang thanh toán hóa đơn (OFFSET_OUT)| OWNER/STAFF| PASS | PASS | PASS | PASS | `DepositServiceTest.testOffsetDepositToInvoice_EX16`, ghi đồng thời deposit offset + invoice payment trong 1 transaction |
+| **DEP-07** | Tiền cọc & Quyết toán| Xác nhận hoàn tất quyết toán cọc (SETTLED) | OWNER/STAFF| PASS | PASS | PASS | PASS | `DepositServiceTest.testSettleDeposit_Success_BR120`, `testSettleDeposit_NotEnded_ThrowsException`, chỉ khi ENDED và held=0 |
+| **DEP-08** | Tiền cọc & Quyết toán| Xem số dư cọc & lịch sử cọc của mình | TENANT | PASS | PASS | PASS | PASS | `/api/v1/deposits/contract/{contractId}`, xem sổ cọc & các bút toán trên Web & Mobile |
 | **OPS-01** | Sự cố & Sửa chữa | Báo cáo sự cố kèm ảnh | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
 | **OPS-02** | Sự cố & Sửa chữa | Tạo và tiếp nhận sự cố trong phạm vi | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
 | **OPS-03** | Sự cố & Sửa chữa | Phân công nhân viên & Cập nhật tiến độ | OWNER/STAFF| NOT_STARTED| NOT_STARTED | NOT_STARTED | NOT_STARTED | — |

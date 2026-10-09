@@ -28,7 +28,7 @@ public class PaymentController {
             @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey,
             @AuthenticationPrincipal UserPrincipal user) {
         InvoiceFinancialStatusResponse response = paymentService.recordPayment(request, user, idempotencyKey);
-        return ResponseEntity.ok(ApiResponse.ok(response, "Ghi nhận thanh toán hóa đơn thành công"));
+        return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
     @PostMapping("/payments/correct")
@@ -38,7 +38,7 @@ public class PaymentController {
             @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey,
             @AuthenticationPrincipal UserPrincipal user) {
         InvoiceFinancialStatusResponse response = paymentService.correctPayment(request, user, idempotencyKey);
-        return ResponseEntity.ok(ApiResponse.ok(response, "Đính chính bút toán thu tiền thành công"));
+        return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
     @PostMapping("/payments/refund")
@@ -48,7 +48,7 @@ public class PaymentController {
             @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey,
             @AuthenticationPrincipal UserPrincipal user) {
         InvoiceFinancialStatusResponse response = paymentService.refundInvoiceCredit(request, user, idempotencyKey);
-        return ResponseEntity.ok(ApiResponse.ok(response, "Hoàn trả số dư thừa hóa đơn thành công"));
+        return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
     @PostMapping("/payments/transfer-credit")
@@ -58,7 +58,7 @@ public class PaymentController {
             @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey,
             @AuthenticationPrincipal UserPrincipal user) {
         InvoiceFinancialStatusResponse response = paymentService.transferCredit(request, user, idempotencyKey);
-        return ResponseEntity.ok(ApiResponse.ok(response, "Chuyển bù trừ số dư sang hóa đơn khác thành công"));
+        return ResponseEntity.ok(ApiResponse.ok(response));
     }
 
     @GetMapping("/invoices/{invoiceId}/financial-status")
