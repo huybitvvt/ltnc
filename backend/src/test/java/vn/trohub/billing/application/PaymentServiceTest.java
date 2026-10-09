@@ -302,11 +302,25 @@ class PaymentServiceTest {
         when(adjustmentRepository.sumDeltaAmountByInvoiceId(invoiceA.getId())).thenReturn(BigDecimal.ZERO);
         when(ledgerEntryRepository.sumAmountByInvoiceId(invoiceA.getId())).thenReturn(new BigDecimal("1000000"));
 
+        String raw = "PAYMENT:" + invoiceA.getId() + ":1000000:TXN-DUPLICATE";
+        String sha256;
+        try {
+            var md = java.security.MessageDigest.getInstance("SHA-256");
+            byte[] b = md.digest(raw.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            var sb = new StringBuilder();
+            for (byte x : b) {
+                sb.append(String.format("%02x", x));
+            }
+            sha256 = sb.toString();
+        } catch (Exception e) {
+            sha256 = "hash";
+        }
+
         FinancialOperation existingOp = new FinancialOperation(
                 "IDEM-DUPLICATE",
                 ownerUser,
                 FinancialAction.PAYMENT,
-                "hash123",
+                sha256,
                 "SUCCESS",
                 "Already processed"
         );

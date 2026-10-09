@@ -23,6 +23,7 @@ import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.util.Collections;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Objects;
@@ -82,11 +83,15 @@ public class PaymentService {
         User actor = userRepository.findById(user.getId())
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy người dùng"));
 
-        // Idempotency check (EX-25)
+        // Idempotency check (EX-25, I-04)
         String reqHash = computeHash("PAYMENT:" + invoice.getId() + ":" + request.amount() + ":" + request.referenceCode());
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             var existingOp = operationRepository.findByIdempotencyKey(idempotencyKey);
             if (existingOp.isPresent()) {
+                FinancialOperation op = existingOp.get();
+                if (!Objects.equals(op.getRequestHash(), reqHash)) {
+                    throw new IllegalStateException("Idempotency key '" + idempotencyKey + "' đã được sử dụng với nội dung khác");
+                }
                 log.info("Idempotency match for key={}", idempotencyKey);
                 return getInvoiceFinancialStatus(invoice.getId(), user);
             }
@@ -374,10 +379,12 @@ public class PaymentService {
 
         BigDecimal originalTotal = invoice.getOriginalTotal() != null ? invoice.getOriginalTotal() : BigDecimal.ZERO;
         BigDecimal adjustmentsTotal = adjustmentRepository.sumDeltaAmountByInvoiceId(invoice.getId());
+        if (adjustmentsTotal == null) adjustmentsTotal = BigDecimal.ZERO;
         BigDecimal effectiveDue = originalTotal.add(adjustmentsTotal);
         if (effectiveDue.compareTo(BigDecimal.ZERO) < 0) effectiveDue = BigDecimal.ZERO;
 
         BigDecimal netApplied = ledgerEntryRepository.sumAmountByInvoiceId(invoice.getId());
+        if (netApplied == null) netApplied = BigDecimal.ZERO;
 
         BigDecimal debt = effectiveDue.subtract(netApplied);
         if (debt.compareTo(BigDecimal.ZERO) < 0) debt = BigDecimal.ZERO;
@@ -397,6 +404,7 @@ public class PaymentService {
         }
 
         List<InvoiceLedgerEntry> entries = ledgerEntryRepository.findByInvoiceIdOrderByRecordedAtAsc(invoice.getId());
+        if (entries == null) entries = Collections.emptyList();
         List<LedgerEntryResponse> entryResponses = entries.stream()
                 .map(e -> new LedgerEntryResponse(
                         e.getId(),
@@ -429,6 +437,7 @@ public class PaymentService {
     private BigDecimal calculateEffectiveDue(Invoice invoice) {
         BigDecimal originalTotal = invoice.getOriginalTotal() != null ? invoice.getOriginalTotal() : BigDecimal.ZERO;
         BigDecimal adjustmentsTotal = adjustmentRepository.sumDeltaAmountByInvoiceId(invoice.getId());
+        if (adjustmentsTotal == null) adjustmentsTotal = BigDecimal.ZERO;
         BigDecimal effectiveDue = originalTotal.add(adjustmentsTotal);
         return effectiveDue.compareTo(BigDecimal.ZERO) < 0 ? BigDecimal.ZERO : effectiveDue;
     }
