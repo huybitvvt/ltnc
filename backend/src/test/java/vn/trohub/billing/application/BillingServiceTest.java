@@ -48,6 +48,8 @@ class BillingServiceTest {
     @Mock
     private FinancialOperationRepository financialOperationRepository;
     @Mock
+    private InvoiceLedgerEntryRepository ledgerEntryRepository;
+    @Mock
     private ContractRepository contractRepository;
     @Mock
     private ContractMemberRepository contractMemberRepository;
@@ -89,6 +91,7 @@ class BillingServiceTest {
                 invoiceAdjustmentRepository,
                 invoiceNoteRepository,
                 financialOperationRepository,
+                ledgerEntryRepository,
                 contractRepository,
                 contractMemberRepository,
                 roomMeterRepository,

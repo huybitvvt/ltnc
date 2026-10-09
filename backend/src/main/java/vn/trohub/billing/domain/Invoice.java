@@ -3,6 +3,7 @@ package vn.trohub.billing.domain;
 import jakarta.persistence.*;
 import vn.trohub.tenancy.domain.Contract;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
@@ -103,6 +104,10 @@ public class Invoice {
         return id;
     }
 
+    public void setId(UUID id) {
+        this.id = id;
+    }
+
     public Contract getContract() {
         return contract;
     }
@@ -181,5 +186,24 @@ public class Invoice {
 
     public Long getVersion() {
         return version;
+    }
+
+    @Transient
+    private BigDecimal transientOriginalTotal;
+
+    public BigDecimal getOriginalTotal() {
+        if (transientOriginalTotal != null) {
+            return transientOriginalTotal;
+        }
+        if (items == null || items.isEmpty()) {
+            return BigDecimal.ZERO;
+        }
+        return items.stream()
+                .map(InvoiceItem::getAmount)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    public void setOriginalTotal(BigDecimal total) {
+        this.transientOriginalTotal = total;
     }
 }

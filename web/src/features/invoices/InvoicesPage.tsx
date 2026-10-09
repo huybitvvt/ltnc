@@ -24,7 +24,7 @@ import {
   Card,
   CardContent,
   Grid,
-  Divider,
+  Tooltip,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -33,16 +33,26 @@ import {
   Edit as AdjustIcon,
   NoteAdd as NoteIcon,
   Refresh as RefreshIcon,
+  Payment as PaymentIcon,
+  Undo as UndoIcon,
+  AssignmentReturn as RefundIcon,
+  SwapHoriz as TransferIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../auth/AuthContext';
 import { invoicesApi } from './invoicesApi';
 import { contractsApi } from '../contracts/contractsApi';
+import { paymentsApi } from '../payments/paymentsApi';
 import {
   InvoiceSummary,
   InvoiceDetail,
   InvoiceStatus,
   PaymentStatus,
 } from './types';
+import {
+  LedgerEntryResponse,
+  InvoiceFinancialStatusResponse,
+  PaymentMethod,
+} from '../payments/types';
 import { ContractSummary } from '../contracts/types';
 
 export const InvoicesPage: React.FC = () => {
@@ -58,35 +68,60 @@ export const InvoicesPage: React.FC = () => {
   const [invoices, setInvoices] = useState<InvoiceSummary[]>([]);
   const [contracts, setContracts] = useState<ContractSummary[]>([]);
   const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
-  // Detail Dialog
+  // Selected Detail
   const [selectedInvoice, setSelectedInvoice] = useState<InvoiceDetail | null>(null);
-  const [detailLoading, setDetailLoading] = useState(false);
   const [detailOpen, setDetailOpen] = useState(false);
+  const [financialStatus, setFinancialStatus] = useState<InvoiceFinancialStatusResponse | null>(null);
 
-  // Preview / Create Draft Dialog
+  // Modal: Preview & Draft
   const [previewOpen, setPreviewOpen] = useState(false);
   const [selectedContractId, setSelectedContractId] = useState<string>('');
   const [previewMonth, setPreviewMonth] = useState<string>(currentMonthStr);
   const [previewData, setPreviewData] = useState<InvoiceDetail | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [actionLoading, setActionLoading] = useState(false);
 
-  // Adjust Dialog
+  // Modal: Adjust Invoice
   const [adjustOpen, setAdjustOpen] = useState(false);
-  const [adjustDelta, setAdjustDelta] = useState<string>('');
-  const [adjustReason, setAdjustReason] = useState<string>('');
-  const [adjustDate, setAdjustDate] = useState<string>(new Date().toISOString().slice(0, 10));
+  const [adjustDelta, setAdjustDelta] = useState('');
+  const [adjustReason, setAdjustReason] = useState('');
+  const [adjustDate, setAdjustDate] = useState(new Date().toISOString().slice(0, 10));
 
-  // Note Dialog
+  // Modal: Note
   const [noteOpen, setNoteOpen] = useState(false);
-  const [noteContent, setNoteContent] = useState<string>('');
-  const [noteReason, setNoteReason] = useState<string>('');
+  const [noteContent, setNoteContent] = useState('');
+  const [noteReason, setNoteReason] = useState('');
+
+  // Modal: Record Payment
+  const [paymentOpen, setPaymentOpen] = useState(false);
+  const [paymentAmount, setPaymentAmount] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('BANK_TRANSFER');
+  const [paymentRefCode, setPaymentRefCode] = useState('');
+  const [paymentNote, setPaymentNote] = useState('');
+
+  // Modal: Payment Correction
+  const [correctOpen, setCorrectOpen] = useState(false);
+  const [targetLedgerEntry, setTargetLedgerEntry] = useState<LedgerEntryResponse | null>(null);
+  const [correctionDelta, setCorrectionDelta] = useState('');
+  const [correctionReason, setCorrectionReason] = useState('');
+
+  // Modal: Refund
+  const [refundOpen, setRefundOpen] = useState(false);
+  const [refundAmount, setRefundAmount] = useState('');
+  const [refundMethod, setRefundMethod] = useState<PaymentMethod>('BANK_TRANSFER');
+  const [refundReason, setRefundReason] = useState('');
+
+  // Modal: Transfer Credit
+  const [transferOpen, setTransferOpen] = useState(false);
+  const [targetInvoiceId, setTargetInvoiceId] = useState('');
+  const [transferAmount, setTransferAmount] = useState('');
+  const [transferReason, setTransferReason] = useState('');
+
+  // Action status
+  const [actionLoading, setActionLoading] = useState(false);
 
   const loadInvoices = async () => {
     setLoading(true);
-    setError(null);
     try {
       const res = await invoicesApi.listInvoices({
         billingMonth: billingMonth || undefined,
@@ -94,7 +129,7 @@ export const InvoicesPage: React.FC = () => {
       });
       setInvoices(res.content || []);
     } catch (err: any) {
-      setError(err.response?.data?.message || 'Không thể tải danh sách hóa đơn');
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -121,45 +156,52 @@ export const InvoicesPage: React.FC = () => {
     }
   }, [isManager]);
 
-  const handleOpenDetail = async (id: string) => {
-    setDetailLoading(true);
-    setDetailOpen(true);
+  const loadFinancialLedger = async (invoiceId: string) => {
     try {
-      const data = await invoicesApi.getInvoice(id);
-      setSelectedInvoice(data);
+      const fin = await paymentsApi.getFinancialStatus(invoiceId);
+      setFinancialStatus(fin);
+    } catch (ignored) {}
+  };
+
+  const handleOpenDetail = async (invoiceId: string) => {
+    setActionLoading(true);
+    try {
+      const res = await invoicesApi.getInvoice(invoiceId);
+      setSelectedInvoice(res);
+      await loadFinancialLedger(invoiceId);
+      setDetailOpen(true);
     } catch (err: any) {
       alert(err.response?.data?.message || 'Lỗi tải chi tiết hóa đơn');
-      setDetailOpen(false);
     } finally {
-      setDetailLoading(false);
+      setActionLoading(false);
     }
   };
 
-  const handleCalculatePreview = async () => {
-    if (!selectedContractId) return;
+  const handlePreview = async () => {
+    if (!selectedContractId || !previewMonth) return;
     setPreviewLoading(true);
     try {
-      const data = await invoicesApi.previewInvoice({
+      const res = await invoicesApi.previewInvoice({
         contractId: selectedContractId,
         billingMonth: previewMonth,
       });
-      setPreviewData(data);
+      setPreviewData(res);
     } catch (err: any) {
-      alert(err.response?.data?.message || 'Lỗi tính toán xem trước hóa đơn');
+      alert(err.response?.data?.message || 'Lỗi tính hóa đơn nháp');
     } finally {
       setPreviewLoading(false);
     }
   };
 
-  const handleSaveDraft = async () => {
-    if (!selectedContractId) return;
+  const handleCreateDraft = async () => {
+    if (!selectedContractId || !previewMonth) return;
     setActionLoading(true);
     try {
       await invoicesApi.createOrRecalculateDraft({
         contractId: selectedContractId,
         billingMonth: previewMonth,
       });
-      alert('Đã lưu hóa đơn nháp thành công!');
+      alert('Đã lập / cập nhật hóa đơn nháp thành công!');
       setPreviewOpen(false);
       loadInvoices();
     } catch (err: any) {
@@ -170,15 +212,16 @@ export const InvoicesPage: React.FC = () => {
   };
 
   const handleIssueInvoice = async (invoiceId: string) => {
-    if (!window.confirm('Bạn có chắc chắn muốn phát hành chính thức hóa đơn này? Hóa đơn đã phát hành là bất biến!')) {
+    if (!window.confirm('Hóa đơn sau khi phát hành sẽ chốt số liệu bất biến và gửi công nợ tới người thuê. Bạn có chắc chắn muốn phát hành?')) {
       return;
     }
     setActionLoading(true);
     try {
-      const idempotencyKey = crypto.randomUUID();
+      const idempotencyKey = `ISSUE-${invoiceId}-${Date.now()}`;
       const res = await invoicesApi.issueInvoice(invoiceId, idempotencyKey);
       alert('Phát hành hóa đơn thành công!');
       setSelectedInvoice(res);
+      await loadFinancialLedger(invoiceId);
       loadInvoices();
     } catch (err: any) {
       alert(err.response?.data?.message || 'Lỗi phát hành hóa đơn');
@@ -187,11 +230,11 @@ export const InvoicesPage: React.FC = () => {
     }
   };
 
-  const handleApplyAdjustment = async () => {
+  const handleAdjustInvoice = async () => {
     if (!selectedInvoice || !adjustDelta || !adjustReason) return;
     setActionLoading(true);
     try {
-      const idempotencyKey = crypto.randomUUID();
+      const idempotencyKey = `ADJUST-${selectedInvoice.id}-${Date.now()}`;
       const res = await invoicesApi.adjustInvoice(
         selectedInvoice.id,
         {
@@ -203,6 +246,7 @@ export const InvoicesPage: React.FC = () => {
       );
       alert('Điều chỉnh hóa đơn thành công!');
       setSelectedInvoice(res);
+      await loadFinancialLedger(selectedInvoice.id);
       setAdjustOpen(false);
       setAdjustDelta('');
       setAdjustReason('');
@@ -226,7 +270,6 @@ export const InvoicesPage: React.FC = () => {
       setNoteOpen(false);
       setNoteContent('');
       setNoteReason('');
-      // Tải lại detail
       const res = await invoicesApi.getInvoice(selectedInvoice.id);
       setSelectedInvoice(res);
     } catch (err: any) {
@@ -236,7 +279,172 @@ export const InvoicesPage: React.FC = () => {
     }
   };
 
-  const formatVND = (val: string | number) => {
+  // Payment Handlers
+  const handleOpenPayment = (inv: InvoiceSummary | InvoiceDetail) => {
+    setSelectedInvoice(inv as any);
+    setPaymentAmount(inv.debt && Number(inv.debt) > 0 ? inv.debt : '');
+    setPaymentMethod('BANK_TRANSFER');
+    setPaymentRefCode('');
+    setPaymentNote('');
+    setPaymentOpen(true);
+  };
+
+  const handleRecordPayment = async () => {
+    if (!selectedInvoice || !paymentAmount) return;
+    const num = Number(paymentAmount);
+    if (isNaN(num) || num <= 0) {
+      alert('Số tiền thanh toán phải lớn hơn 0');
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const idempotencyKey = `PAY-${selectedInvoice.id}-${Date.now()}`;
+      const fin = await paymentsApi.recordPayment(
+        {
+          invoiceId: selectedInvoice.id,
+          amount: num,
+          paymentMethod,
+          referenceCode: paymentRefCode || undefined,
+          note: paymentNote || undefined,
+        },
+        idempotencyKey
+      );
+      alert('Ghi nhận thu tiền thành công!');
+      setFinancialStatus(fin);
+      setPaymentOpen(false);
+      if (detailOpen) {
+        const refreshed = await invoicesApi.getInvoice(selectedInvoice.id);
+        setSelectedInvoice(refreshed);
+      }
+      loadInvoices();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Lỗi ghi nhận thanh toán');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleOpenCorrection = (entry: LedgerEntryResponse) => {
+    setTargetLedgerEntry(entry);
+    setCorrectionDelta('');
+    setCorrectionReason('');
+    setCorrectOpen(true);
+  };
+
+  const handleConfirmCorrection = async () => {
+    if (!targetLedgerEntry || !correctionDelta || !correctionReason) return;
+    const num = Number(correctionDelta);
+    if (isNaN(num) || num === 0) {
+      alert('Số tiền điều chỉnh phải khác 0 (dùng dấu âm (-) để giảm số thu)');
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const idempotencyKey = `CORR-${targetLedgerEntry.id}-${Date.now()}`;
+      const fin = await paymentsApi.correctPayment(
+        {
+          refEntryId: targetLedgerEntry.id,
+          deltaAmount: num,
+          reason: correctionReason,
+        },
+        idempotencyKey
+      );
+      alert('Đính chính thu tiền thành công!');
+      setFinancialStatus(fin);
+      setCorrectOpen(false);
+      if (selectedInvoice) {
+        const refreshed = await invoicesApi.getInvoice(selectedInvoice.id);
+        setSelectedInvoice(refreshed);
+      }
+      loadInvoices();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Lỗi đính chính thu tiền');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleOpenRefund = () => {
+    if (!selectedInvoice) return;
+    setRefundAmount(financialStatus?.credit || selectedInvoice.credit || '');
+    setRefundMethod('BANK_TRANSFER');
+    setRefundReason('');
+    setRefundOpen(true);
+  };
+
+  const handleConfirmRefund = async () => {
+    if (!selectedInvoice || !refundAmount || !refundReason) return;
+    const num = Number(refundAmount);
+    if (isNaN(num) || num <= 0) {
+      alert('Số tiền hoàn phải lớn hơn 0');
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const idempotencyKey = `REF-${selectedInvoice.id}-${Date.now()}`;
+      const fin = await paymentsApi.refundCredit(
+        {
+          invoiceId: selectedInvoice.id,
+          amount: num,
+          paymentMethod: refundMethod,
+          reason: refundReason,
+        },
+        idempotencyKey
+      );
+      alert('Hoàn trả tiền thừa thành công!');
+      setFinancialStatus(fin);
+      setRefundOpen(false);
+      const refreshed = await invoicesApi.getInvoice(selectedInvoice.id);
+      setSelectedInvoice(refreshed);
+      loadInvoices();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Lỗi hoàn tiền');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const handleOpenTransfer = () => {
+    if (!selectedInvoice) return;
+    setTargetInvoiceId('');
+    setTransferAmount('');
+    setTransferReason('');
+    setTransferOpen(true);
+  };
+
+  const handleConfirmTransfer = async () => {
+    if (!selectedInvoice || !targetInvoiceId || !transferAmount || !transferReason) return;
+    const num = Number(transferAmount);
+    if (isNaN(num) || num <= 0) {
+      alert('Số tiền chuyển phải lớn hơn 0');
+      return;
+    }
+    setActionLoading(true);
+    try {
+      const idempotencyKey = `TRF-${selectedInvoice.id}-${Date.now()}`;
+      const fin = await paymentsApi.transferCredit(
+        {
+          sourceInvoiceId: selectedInvoice.id,
+          targetInvoiceId,
+          amount: num,
+          reason: transferReason,
+        },
+        idempotencyKey
+      );
+      alert('Chuyển bù trừ số dư sang hóa đơn khác thành công!');
+      setFinancialStatus(fin);
+      setTransferOpen(false);
+      const refreshed = await invoicesApi.getInvoice(selectedInvoice.id);
+      setSelectedInvoice(refreshed);
+      loadInvoices();
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Lỗi chuyển dư');
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  const formatVND = (val: string | number | undefined | null) => {
     const num = Number(val) || 0;
     return new Intl.NumberFormat('vi-VN').format(num) + ' đ';
   };
@@ -251,27 +459,53 @@ export const InvoicesPage: React.FC = () => {
   const renderPaymentChip = (pStatus: PaymentStatus) => {
     switch (pStatus) {
       case 'PAID':
-        return <Chip label="Đã thanh toán" color="success" size="small" variant="outlined" />;
+        return <Chip label="Đã thanh toán đủ" color="success" size="small" variant="outlined" />;
       case 'PARTIAL':
         return <Chip label="Thanh toán một phần" color="warning" size="small" variant="outlined" />;
       case 'CREDIT':
-        return <Chip label="Có tiền dư (Credit)" color="info" size="small" variant="outlined" />;
+        return <Chip label="Có tiền dư (Credit)" color="secondary" size="small" variant="outlined" />;
       case 'UNPAID':
       default:
         return <Chip label="Chưa thanh toán" color="error" size="small" variant="outlined" />;
     }
   };
 
+  const renderLedgerTypeChip = (type: string) => {
+    switch (type) {
+      case 'PAYMENT':
+        return <Chip label="THU TIỀN" color="success" size="small" />;
+      case 'PAYMENT_CORRECTION':
+        return <Chip label="SỬA THU" color="warning" size="small" />;
+      case 'REFUND':
+        return <Chip label="HOÀN TIỀN" color="error" size="small" />;
+      case 'CREDIT_APPLIED':
+        return <Chip label="BÙ TRỪ / CHUYỂN DƯ" color="secondary" size="small" />;
+      default:
+        return <Chip label={type} size="small" />;
+    }
+  };
+
+  // Các hóa đơn khác của cùng hợp đồng có nợ để chuyển dư
+  const otherDebtInvoices = invoices.filter(
+    (inv) => selectedInvoice && inv.id !== selectedInvoice.id && Number(inv.debt) > 0
+  );
+
   return (
     <Box sx={{ p: { xs: 2, md: 3 } }}>
       {/* Header */}
-      <Stack direction={{ xs: 'column', sm: 'row' }} justifyContent="space-between" alignItems={{ xs: 'flex-start', sm: 'center' }} spacing={2} mb={3}>
+      <Stack
+        direction={{ xs: 'column', sm: 'row' }}
+        justifyContent="space-between"
+        alignItems={{ xs: 'flex-start', sm: 'center' }}
+        spacing={2}
+        mb={3}
+      >
         <Box>
           <Typography variant="h4" fontWeight="bold" gutterBottom>
-            🧾 Quản Lý Hóa Đơn & Tính Tiền
+            🧾 Quản Lý Hóa Đơn, Thu Phí & Sổ Cái
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            Tính tiền phòng, điện nước, dịch vụ định kỳ và điều chỉnh hóa đơn theo đúng quy tắc kế toán bất biến
+            Tính tiền phòng, điện nước, dịch vụ định kỳ; thu tiền, đính chính, hoàn tiền và chuyển dư bất biến
           </Typography>
         </Box>
         {isManager && (
@@ -299,81 +533,124 @@ export const InvoicesPage: React.FC = () => {
             onChange={(e) => setBillingMonth(e.target.value)}
             InputLabelProps={{ shrink: true }}
             size="small"
-            sx={{ width: { xs: '100%', sm: 200 } }}
+            sx={{ width: { xs: '100%', sm: 220 } }}
           />
           <TextField
-            select
             label="Trạng thái hóa đơn"
+            select
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
             size="small"
-            sx={{ width: { xs: '100%', sm: 220 } }}
+            sx={{ width: { xs: '100%', sm: 200 } }}
           >
             <MenuItem value="ALL">Tất cả trạng thái</MenuItem>
-            <MenuItem value="DRAFT">Bản nháp (DRAFT)</MenuItem>
             <MenuItem value="ISSUED">Đã phát hành (ISSUED)</MenuItem>
+            <MenuItem value="DRAFT">Bản nháp (DRAFT)</MenuItem>
           </TextField>
           <Button
             variant="outlined"
             startIcon={<RefreshIcon />}
             onClick={loadInvoices}
-            disabled={loading}
+            size="medium"
           >
             Làm mới
           </Button>
         </Stack>
       </Paper>
 
-      {error && <Alert severity="error" sx={{ mb: 3 }}>{error}</Alert>}
-
-      {/* Table */}
-      <TableContainer component={Paper} sx={{ borderRadius: 2 }}>
+      {/* Invoice Table */}
+      <TableContainer component={Paper} sx={{ borderRadius: 2, boxShadow: 1 }}>
         <Table>
           <TableHead sx={{ backgroundColor: 'action.hover' }}>
             <TableRow>
+              <TableCell><strong>Kỳ thu</strong></TableCell>
               <TableCell><strong>Phòng</strong></TableCell>
               <TableCell><strong>Tòa nhà</strong></TableCell>
-              <TableCell><strong>Khách thuê</strong></TableCell>
-              <TableCell><strong>Kỳ tháng</strong></TableCell>
-              <TableCell><strong>Vòng đời</strong></TableCell>
-              <TableCell align="right"><strong>Tổng tiền hiệu lực</strong></TableCell>
+              <TableCell><strong>Khách thuê đại diện</strong></TableCell>
+              <TableCell align="right"><strong>Tổng phải thu</strong></TableCell>
               <TableCell align="right"><strong>Còn nợ</strong></TableCell>
-              <TableCell><strong>Thanh toán</strong></TableCell>
-              <TableCell><strong>Hạn nợ</strong></TableCell>
+              <TableCell align="center"><strong>Trạng thái</strong></TableCell>
+              <TableCell align="center"><strong>Thanh toán</strong></TableCell>
+              <TableCell align="center"><strong>Hạn nộp</strong></TableCell>
               <TableCell align="center"><strong>Thao tác</strong></TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={10} align="center" sx={{ py: 3 }}>
+                <TableCell colSpan={10} align="center" sx={{ py: 6 }}>
                   <CircularProgress size={32} />
+                  <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
+                    Đang tải danh sách hóa đơn...
+                  </Typography>
                 </TableCell>
               </TableRow>
             ) : invoices.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} align="center" sx={{ py: 3 }}>
-                  Chưa có hóa đơn nào phù hợp với bộ lọc
+                <TableCell colSpan={10} align="center" sx={{ py: 6 }}>
+                  <Typography variant="body1" color="text.secondary">
+                    Không có hóa đơn nào trong kỳ {billingMonth || 'đã chọn'}
+                  </Typography>
                 </TableCell>
               </TableRow>
             ) : (
               invoices.map((inv) => (
                 <TableRow key={inv.id} hover>
-                  <TableCell><strong>{inv.roomName}</strong></TableCell>
+                  <TableCell><strong>{inv.billingMonth}</strong></TableCell>
+                  <TableCell><strong>Phòng {inv.roomName}</strong></TableCell>
                   <TableCell>{inv.buildingName}</TableCell>
                   <TableCell>{inv.tenantName}</TableCell>
-                  <TableCell><Chip label={inv.billingMonth} size="small" variant="outlined" /></TableCell>
-                  <TableCell>{renderStatusChip(inv.status)}</TableCell>
-                  <TableCell align="right"><strong>{formatVND(inv.effectiveDue)}</strong></TableCell>
-                  <TableCell align="right" sx={{ color: Number(inv.debt) > 0 ? 'error.main' : 'text.primary' }}>
+                  <TableCell align="right" sx={{ fontWeight: 'bold' }}>
+                    {formatVND(inv.effectiveDue)}
+                  </TableCell>
+                  <TableCell
+                    align="right"
+                    sx={{
+                      fontWeight: 'bold',
+                      color: Number(inv.debt) > 0 ? 'error.main' : 'success.main',
+                    }}
+                  >
                     {formatVND(inv.debt)}
                   </TableCell>
-                  <TableCell>{renderPaymentChip(inv.paymentStatus)}</TableCell>
-                  <TableCell>{inv.dueDate}</TableCell>
+                  <TableCell align="center">{renderStatusChip(inv.status)}</TableCell>
+                  <TableCell align="center">{renderPaymentChip(inv.paymentStatus)}</TableCell>
+                  <TableCell align="center">{inv.dueDate || '—'}</TableCell>
                   <TableCell align="center">
-                    <IconButton color="primary" size="small" onClick={() => handleOpenDetail(inv.id)} title="Xem chi tiết">
-                      <ViewIcon />
-                    </IconButton>
+                    <Stack direction="row" spacing={0.5} justifyContent="center">
+                      <Tooltip title="Xem chi tiết & Sổ cái">
+                        <IconButton
+                          color="primary"
+                          size="small"
+                          onClick={() => handleOpenDetail(inv.id)}
+                        >
+                          <ViewIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+
+                      {isManager && inv.status === 'ISSUED' && Number(inv.debt) > 0 && (
+                        <Tooltip title="Thu tiền nhanh">
+                          <IconButton
+                            color="success"
+                            size="small"
+                            onClick={() => handleOpenPayment(inv)}
+                          >
+                            <PaymentIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+
+                      {isManager && inv.status === 'DRAFT' && (
+                        <Tooltip title="Phát hành hóa đơn">
+                          <IconButton
+                            color="success"
+                            size="small"
+                            onClick={() => handleIssueInvoice(inv.id)}
+                          >
+                            <IssueIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </Stack>
                   </TableCell>
                 </TableRow>
               ))
@@ -382,112 +659,240 @@ export const InvoicesPage: React.FC = () => {
         </Table>
       </TableContainer>
 
-      {/* Invoice Detail Dialog */}
-      <Dialog open={detailOpen} onClose={() => setDetailOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle sx={{ pb: 1 }}>
-          <Stack direction="row" justifyContent="space-between" alignItems="center">
-            <Typography variant="h6" fontWeight="bold">
-              Chi Tiết Hóa Đơn — Phòng {selectedInvoice?.roomName} ({selectedInvoice?.billingMonth})
-            </Typography>
-            {selectedInvoice && renderStatusChip(selectedInvoice.status)}
-          </Stack>
+      {/* Modal 1: Invoice Detail & Ledger */}
+      <Dialog
+        open={detailOpen}
+        onClose={() => setDetailOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 'bold', pb: 1 }}>
+          Chi Tiết Hóa Đơn Kỳ {selectedInvoice?.billingMonth} — Phòng {selectedInvoice?.roomName}
         </DialogTitle>
         <DialogContent dividers>
-          {detailLoading || !selectedInvoice ? (
-            <Box textAlign="center" py={4}><CircularProgress /></Box>
-          ) : (
-            <Stack spacing={3}>
-              {/* Info grid */}
+          {selectedInvoice && (
+            <Stack spacing={2.5}>
+              {/* Meta Info */}
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={6}>
-                  <Typography variant="body2" color="text.secondary">Tòa nhà:</Typography>
-                  <Typography variant="body1" fontWeight="500">{selectedInvoice.buildingName}</Typography>
+                  <Typography variant="body2"><strong>Tòa nhà:</strong> {selectedInvoice.buildingName}</Typography>
+                  <Typography variant="body2"><strong>Đại diện thuê:</strong> {selectedInvoice.tenantName}</Typography>
+                  <Typography variant="body2">
+                    <strong>Kỳ tính:</strong> {selectedInvoice.periodStart} đến {selectedInvoice.periodEndExclusive}
+                  </Typography>
                 </Grid>
                 <Grid item xs={12} sm={6}>
-                  <Typography variant="body2" color="text.secondary">Người đại diện:</Typography>
-                  <Typography variant="body1" fontWeight="500">{selectedInvoice.tenantName}</Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="body2" color="text.secondary">Khoảng tính tiền:</Typography>
-                  <Typography variant="body1">{selectedInvoice.periodStart} ➔ {selectedInvoice.periodEndExclusive} (end-exclusive)</Typography>
-                </Grid>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="body2" color="text.secondary">Hạn thanh toán (Due date):</Typography>
-                  <Typography variant="body1" fontWeight="500">{selectedInvoice.dueDate}</Typography>
+                  <Typography variant="body2"><strong>Hạn nộp tiền:</strong> {selectedInvoice.dueDate}</Typography>
+                  <Typography variant="body2">
+                    <strong>Trạng thái hóa đơn:</strong> {renderStatusChip(selectedInvoice.status)}
+                  </Typography>
+                  <Typography variant="body2" sx={{ mt: 0.5 }}>
+                    <strong>Tình trạng công nợ:</strong> {renderPaymentChip(financialStatus?.paymentStatus || selectedInvoice.paymentStatus)}
+                  </Typography>
                 </Grid>
               </Grid>
 
-              <Divider />
-
-              {/* Items Table */}
-              <Typography variant="subtitle1" fontWeight="bold">📋 Chi Tiết Từng Khoản Phí</Typography>
-              <TableContainer component={Paper} variant="outlined">
-                <Table size="small">
-                  <TableHead sx={{ backgroundColor: 'action.hover' }}>
-                    <TableRow>
-                      <TableCell><strong>Khoản mục</strong></TableCell>
-                      <TableCell align="right"><strong>Số lượng</strong></TableCell>
-                      <TableCell align="right"><strong>Đơn giá</strong></TableCell>
-                      <TableCell align="right"><strong>Thành tiền</strong></TableCell>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {selectedInvoice.items.map((item, idx) => (
-                      <TableRow key={idx}>
-                        <TableCell>
-                          <Typography variant="body2" fontWeight="500">{item.label}</Typography>
-                          <Typography variant="caption" color="text.secondary">Loại: {item.type}</Typography>
-                        </TableCell>
-                        <TableCell align="right">{item.quantity}</TableCell>
-                        <TableCell align="right">{formatVND(item.unitPrice)}</TableCell>
-                        <TableCell align="right"><strong>{formatVND(item.amount)}</strong></TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </TableContainer>
-
-              {/* Financial summary */}
+              {/* Financial 4-Block Summary */}
               <Card variant="outlined" sx={{ backgroundColor: 'background.default' }}>
                 <CardContent>
                   <Grid container spacing={2}>
                     <Grid item xs={6} sm={3}>
-                      <Typography variant="caption" color="text.secondary">Tiền gốc ban đầu</Typography>
-                      <Typography variant="h6">{formatVND(selectedInvoice.originalTotal)}</Typography>
-                    </Grid>
-                    <Grid item xs={6} sm={3}>
-                      <Typography variant="caption" color="text.secondary">Tổng điều chỉnh</Typography>
-                      <Typography variant="h6" sx={{ color: Number(selectedInvoice.adjustmentsTotal) < 0 ? 'success.main' : 'text.primary' }}>
-                        {formatVND(selectedInvoice.adjustmentsTotal)}
+                      <Typography variant="caption" color="text.secondary">Tổng phải nộp</Typography>
+                      <Typography variant="h6" fontWeight="bold" color="primary.main">
+                        {formatVND(financialStatus?.effectiveDue || selectedInvoice.effectiveDue)}
                       </Typography>
                     </Grid>
                     <Grid item xs={6} sm={3}>
-                      <Typography variant="caption" color="text.secondary">Tổng phải nộp (effectiveDue)</Typography>
-                      <Typography variant="h6" fontWeight="bold" color="primary.main">
-                        {formatVND(selectedInvoice.effectiveDue)}
+                      <Typography variant="caption" color="text.secondary">Đã áp dụng (netApplied)</Typography>
+                      <Typography variant="h6" fontWeight="bold" sx={{ color: 'info.main' }}>
+                        {formatVND(financialStatus?.netApplied || selectedInvoice.netApplied)}
                       </Typography>
                     </Grid>
                     <Grid item xs={6} sm={3}>
                       <Typography variant="caption" color="text.secondary">Còn nợ (debt)</Typography>
-                      <Typography variant="h6" fontWeight="bold" color={Number(selectedInvoice.debt) > 0 ? 'error.main' : 'success.main'}>
-                        {formatVND(selectedInvoice.debt)}
+                      <Typography
+                        variant="h6"
+                        fontWeight="bold"
+                        sx={{
+                          color: Number(financialStatus?.debt || selectedInvoice.debt) > 0 ? 'error.main' : 'success.main',
+                        }}
+                      >
+                        {formatVND(financialStatus?.debt || selectedInvoice.debt)}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={6} sm={3}>
+                      <Typography variant="caption" color="text.secondary">Tiền dư (credit)</Typography>
+                      <Typography
+                        variant="h6"
+                        fontWeight="bold"
+                        sx={{
+                          color: Number(financialStatus?.credit || selectedInvoice.credit) > 0 ? 'secondary.main' : 'text.secondary',
+                        }}
+                      >
+                        {formatVND(financialStatus?.credit || selectedInvoice.credit)}
                       </Typography>
                     </Grid>
                   </Grid>
                 </CardContent>
               </Card>
 
+              {/* Items Breakdown Table */}
+              <Box>
+                <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+                  📋 Chi Tiết Từng Khoản Thu (Snapshot Bất biến)
+                </Typography>
+                <TableContainer component={Paper} variant="outlined">
+                  <Table size="small">
+                    <TableHead sx={{ backgroundColor: 'action.hover' }}>
+                      <TableRow>
+                        <TableCell><strong>Loại phí</strong></TableCell>
+                        <TableCell><strong>Khoản mục</strong></TableCell>
+                        <TableCell align="right"><strong>Số lượng</strong></TableCell>
+                        <TableCell align="right"><strong>Đơn giá</strong></TableCell>
+                        <TableCell align="right"><strong>Thành tiền</strong></TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {selectedInvoice.items.map((item, idx) => (
+                        <TableRow key={item.id || idx}>
+                          <TableCell>
+                            <Chip label={item.type} size="small" variant="outlined" />
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" fontWeight="medium">{item.label}</Typography>
+                            {item.calculationSnapshot && (
+                              <Typography variant="caption" color="text.secondary" display="block">
+                                {item.calculationSnapshot}
+                              </Typography>
+                            )}
+                          </TableCell>
+                          <TableCell align="right">{item.quantity}</TableCell>
+                          <TableCell align="right">{formatVND(item.unitPrice)}</TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 'bold' }}>
+                            {formatVND(item.amount)}
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+
+              {/* Ledger Entries Table */}
+              <Box>
+                <Stack direction="row" justifyContent="space-between" alignItems="center" mb={1}>
+                  <Typography variant="subtitle2" fontWeight="bold">
+                    💳 Sổ Cái Thu Tiền & Công Nợ (Ledger)
+                  </Typography>
+                  {isManager && Number(financialStatus?.credit || selectedInvoice.credit) > 0 && (
+                    <Stack direction="row" spacing={1}>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="error"
+                        startIcon={<RefundIcon />}
+                        onClick={handleOpenRefund}
+                      >
+                        Hoàn tiền dư
+                      </Button>
+                      <Button
+                        size="small"
+                        variant="outlined"
+                        color="secondary"
+                        startIcon={<TransferIcon />}
+                        onClick={handleOpenTransfer}
+                      >
+                        Chuyển dư bù nợ
+                      </Button>
+                    </Stack>
+                  )}
+                </Stack>
+
+                <TableContainer component={Paper} variant="outlined">
+                  <Table size="small">
+                    <TableHead sx={{ backgroundColor: 'action.hover' }}>
+                      <TableRow>
+                        <TableCell><strong>Thời gian</strong></TableCell>
+                        <TableCell><strong>Loại bút toán</strong></TableCell>
+                        <TableCell align="right"><strong>Số tiền</strong></TableCell>
+                        <TableCell><strong>Phương thức</strong></TableCell>
+                        <TableCell><strong>Mã tham chiếu / Ghi chú</strong></TableCell>
+                        <TableCell><strong>Người ghi nhận</strong></TableCell>
+                        {isManager && <TableCell align="center"><strong>Sửa thu</strong></TableCell>}
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {!financialStatus?.entries || financialStatus.entries.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={isManager ? 7 : 6} align="center" sx={{ py: 3, color: 'text.secondary' }}>
+                            Chưa có bút toán thanh toán nào cho hóa đơn này
+                          </TableCell>
+                        </TableRow>
+                      ) : (
+                        financialStatus.entries.map((entry) => {
+                          const isNegative = Number(entry.amount) < 0;
+                          return (
+                            <TableRow key={entry.id}>
+                              <TableCell sx={{ fontSize: '0.8rem' }}>
+                                {new Date(entry.recordedAt).toLocaleString('vi-VN')}
+                              </TableCell>
+                              <TableCell>{renderLedgerTypeChip(entry.entryType)}</TableCell>
+                              <TableCell
+                                align="right"
+                                sx={{
+                                  fontWeight: 'bold',
+                                  color: isNegative ? 'error.main' : 'success.main',
+                                }}
+                              >
+                                {isNegative ? '' : '+'}{formatVND(entry.amount)}
+                              </TableCell>
+                              <TableCell sx={{ fontSize: '0.8rem' }}>{entry.paymentMethod}</TableCell>
+                              <TableCell sx={{ fontSize: '0.8rem' }}>
+                                {entry.referenceCode && (
+                                  <Chip label={entry.referenceCode} size="small" sx={{ mr: 0.5, height: 20, fontSize: '0.7rem' }} />
+                                )}
+                                {entry.note || '—'}
+                              </TableCell>
+                              <TableCell sx={{ fontSize: '0.8rem' }}>{entry.actorName}</TableCell>
+                              {isManager && (
+                                <TableCell align="center">
+                                  {entry.entryType === 'PAYMENT' && (
+                                    <Tooltip title="Sửa thu nhập nhầm">
+                                      <IconButton
+                                        size="small"
+                                        color="warning"
+                                        onClick={() => handleOpenCorrection(entry)}
+                                      >
+                                        <UndoIcon fontSize="small" />
+                                      </IconButton>
+                                    </Tooltip>
+                                  )}
+                                </TableCell>
+                              )}
+                            </TableRow>
+                          );
+                        })
+                      )}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              </Box>
+
               {/* Adjustments History */}
               {selectedInvoice.adjustments.length > 0 && (
                 <Box>
                   <Typography variant="subtitle2" fontWeight="bold" color="warning.main" gutterBottom>
-                    ⚖️ Lịch Sử Điều Chỉnh Giá Trị (Bất biến)
+                    ⚖️ Lịch Sử Điều Chỉnh Giá Trị Hóa Đơn (BR-081)
                   </Typography>
                   <Stack spacing={1}>
                     {selectedInvoice.adjustments.map((adj) => (
                       <Paper key={adj.id} variant="outlined" sx={{ p: 1.5, backgroundColor: 'action.hover' }}>
                         <Stack direction="row" justifyContent="space-between">
-                          <Typography variant="body2" fontWeight="bold" color={Number(adj.deltaAmount) > 0 ? 'error.main' : 'success.main'}>
+                          <Typography
+                            variant="body2"
+                            fontWeight="bold"
+                            color={Number(adj.deltaAmount) > 0 ? 'error.main' : 'success.main'}
+                          >
                             {Number(adj.deltaAmount) > 0 ? '+' : ''}{formatVND(adj.deltaAmount)}
                           </Typography>
                           <Typography variant="caption" color="text.secondary">
@@ -520,46 +925,80 @@ export const InvoicesPage: React.FC = () => {
             </Stack>
           )}
         </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          {isManager && selectedInvoice?.status === 'DRAFT' && (
-            <Button
-              variant="contained"
-              color="success"
-              startIcon={<IssueIcon />}
-              onClick={() => handleIssueInvoice(selectedInvoice.id)}
-              disabled={actionLoading}
-            >
-              Phát Hành Hóa Đơn
-            </Button>
-          )}
-          {isManager && selectedInvoice?.status === 'ISSUED' && (
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setDetailOpen(false)}>Đóng</Button>
+
+          {isManager && selectedInvoice && (
             <>
-              <Button
-                variant="outlined"
-                color="warning"
-                startIcon={<AdjustIcon />}
-                onClick={() => setAdjustOpen(true)}
-              >
-                Điều Chỉnh Hóa Đơn
-              </Button>
+              {selectedInvoice.status === 'DRAFT' && (
+                <Button
+                  variant="contained"
+                  color="success"
+                  startIcon={<IssueIcon />}
+                  onClick={() => handleIssueInvoice(selectedInvoice.id)}
+                  disabled={actionLoading}
+                >
+                  Phát Hành Hóa Đơn
+                </Button>
+              )}
+
+              {selectedInvoice.status === 'ISSUED' && (
+                <>
+                  <Button
+                    variant="contained"
+                    color="success"
+                    startIcon={<PaymentIcon />}
+                    onClick={() => handleOpenPayment(selectedInvoice)}
+                  >
+                    Thu Tiền
+                  </Button>
+                  <Button
+                    variant="outlined"
+                    color="warning"
+                    startIcon={<AdjustIcon />}
+                    onClick={() => {
+                      setAdjustDelta('');
+                      setAdjustReason('');
+                      setAdjustOpen(true);
+                    }}
+                  >
+                    Điều Chỉnh
+                  </Button>
+                </>
+              )}
+
               <Button
                 variant="outlined"
                 startIcon={<NoteIcon />}
-                onClick={() => setNoteOpen(true)}
+                onClick={() => {
+                  setNoteContent('');
+                  setNoteReason('');
+                  setNoteOpen(true);
+                }}
               >
-                Thêm Ghi Chú
+                Ghi Chú
               </Button>
             </>
           )}
-          <Button onClick={() => setDetailOpen(false)}>Đóng</Button>
         </DialogActions>
       </Dialog>
 
-      {/* Preview / Create Draft Dialog */}
-      <Dialog open={previewOpen} onClose={() => setPreviewOpen(false)} maxWidth="md" fullWidth>
-        <DialogTitle>Lập & Xem Trước Hóa Đơn Kỳ</DialogTitle>
+      {/* Modal 2: Preview & Create Draft */}
+      <Dialog
+        open={previewOpen}
+        onClose={() => setPreviewOpen(false)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 'bold' }}>
+          Lập & Xem Trước Hóa Đơn Tiền Phòng
+        </DialogTitle>
         <DialogContent dividers>
-          <Stack spacing={2} sx={{ mt: 1 }}>
+          <Stack spacing={2.5}>
+            <Alert severity="info">
+              Hệ thống tự động tính: Tiền phòng (theo số ngày ở thực tế), Điện nước (lũy tiến/đồng giá từ chỉ số đồng hồ),
+              Dịch vụ cố định/theo người, và các phụ thu phát sinh trong kỳ.
+            </Alert>
             <Stack direction={{ xs: 'column', sm: 'row' }} spacing={2}>
               <TextField
                 select
@@ -586,25 +1025,24 @@ export const InvoicesPage: React.FC = () => {
               />
               <Button
                 variant="contained"
-                onClick={handleCalculatePreview}
+                onClick={handlePreview}
                 disabled={previewLoading || !selectedContractId}
+                sx={{ whiteSpace: 'nowrap' }}
               >
-                Tính Toán
+                {previewLoading ? <CircularProgress size={24} /> : 'Tính toán'}
               </Button>
             </Stack>
 
-            {previewLoading && <Box textAlign="center" py={3}><CircularProgress /></Box>}
-
             {previewData && (
               <Box sx={{ mt: 2 }}>
-                <Typography variant="subtitle1" fontWeight="bold" gutterBottom>
-                  Kết quả tính toán dự kiến ({previewData.periodStart} ➔ {previewData.periodEndExclusive}):
+                <Typography variant="subtitle2" fontWeight="bold" gutterBottom>
+                  Kết quả tính toán nháp (Kỳ: {previewData.periodStart} đến {previewData.periodEndExclusive})
                 </Typography>
-                <TableContainer component={Paper} variant="outlined" sx={{ mb: 2 }}>
+                <TableContainer component={Paper} variant="outlined">
                   <Table size="small">
                     <TableHead sx={{ backgroundColor: 'action.hover' }}>
                       <TableRow>
-                        <TableCell><strong>Khoản phí</strong></TableCell>
+                        <TableCell><strong>Khoản mục</strong></TableCell>
                         <TableCell align="right"><strong>Số lượng</strong></TableCell>
                         <TableCell align="right"><strong>Đơn giá</strong></TableCell>
                         <TableCell align="right"><strong>Thành tiền</strong></TableCell>
@@ -613,15 +1051,26 @@ export const InvoicesPage: React.FC = () => {
                     <TableBody>
                       {previewData.items.map((it, idx) => (
                         <TableRow key={idx}>
-                          <TableCell>{it.label}</TableCell>
+                          <TableCell>
+                            <Typography variant="body2" fontWeight="bold">{it.label}</Typography>
+                            {it.calculationSnapshot && (
+                              <Typography variant="caption" color="text.secondary">
+                                {it.calculationSnapshot}
+                              </Typography>
+                            )}
+                          </TableCell>
                           <TableCell align="right">{it.quantity}</TableCell>
                           <TableCell align="right">{formatVND(it.unitPrice)}</TableCell>
-                          <TableCell align="right"><strong>{formatVND(it.amount)}</strong></TableCell>
+                          <TableCell align="right" sx={{ fontWeight: 'bold' }}>
+                            {formatVND(it.amount)}
+                          </TableCell>
                         </TableRow>
                       ))}
-                      <TableRow sx={{ backgroundColor: 'action.hover' }}>
-                        <TableCell colSpan={3}><strong>TỔNG TIỀN DỰ KIẾN:</strong></TableCell>
-                        <TableCell align="right"><Typography variant="h6" color="primary.main">{formatVND(previewData.originalTotal)}</Typography></TableCell>
+                      <TableRow sx={{ backgroundColor: 'action.selected' }}>
+                        <TableCell colSpan={3}><strong>TỔNG CỘNG HÓA ĐƠN</strong></TableCell>
+                        <TableCell align="right" sx={{ fontWeight: 'bold', fontSize: '1.1rem', color: 'primary.main' }}>
+                          {formatVND(previewData.effectiveDue)}
+                        </TableCell>
                       </TableRow>
                     </TableBody>
                   </Table>
@@ -630,98 +1079,341 @@ export const InvoicesPage: React.FC = () => {
             )}
           </Stack>
         </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
-          {previewData && (
-            <Button
-              variant="contained"
-              color="warning"
-              onClick={handleSaveDraft}
-              disabled={actionLoading}
-            >
-              Lưu Vào Bản Nháp (Draft)
-            </Button>
-          )}
-          <Button onClick={() => setPreviewOpen(false)}>Hủy</Button>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setPreviewOpen(false)}>Đóng</Button>
+          <Button
+            variant="contained"
+            onClick={handleCreateDraft}
+            disabled={actionLoading || !previewData}
+          >
+            Lưu Hóa Đơn Nháp
+          </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Adjust Invoice Dialog */}
-      <Dialog open={adjustOpen} onClose={() => setAdjustOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Điều Chỉnh Giá Trị Hóa Đơn (BR-080..084)</DialogTitle>
+      {/* Modal 3: Record Payment */}
+      <Dialog open={paymentOpen} onClose={() => setPaymentOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 'bold' }}>
+          Ghi Nhận Thu Tiền Hóa Đơn
+        </DialogTitle>
         <DialogContent dividers>
-          <Alert severity="info" sx={{ mb: 2 }}>
-            Hóa đơn đã phát hành không thể sửa trực tiếp. Bút toán điều chỉnh sẽ ghi lại chênh lệch có dấu (+ hoặc -) và giữ nguyên bản gốc.
-          </Alert>
-          <Stack spacing={2} sx={{ mt: 1 }}>
+          <Stack spacing={2}>
+            <Alert severity="info">
+              Ghi nhận thanh toán vào sổ cái bất biến (BR-087..BR-095). Có thể thu một phần hoặc toàn bộ.
+            </Alert>
             <TextField
-              label="Số tiền điều chỉnh (VND, có dấu)"
-              placeholder="Ví dụ: -200000 hoặc 150000"
+              label="Số tiền thu (VND) *"
+              type="number"
+              value={paymentAmount}
+              onChange={(e) => setPaymentAmount(e.target.value)}
+              fullWidth
+              size="small"
+              helperText={`Còn nợ: ${formatVND(selectedInvoice?.debt)}`}
+            />
+            <TextField
+              label="Phương thức thanh toán *"
+              select
+              value={paymentMethod}
+              onChange={(e) => setPaymentMethod(e.target.value as PaymentMethod)}
+              fullWidth
+              size="small"
+            >
+              <MenuItem value="BANK_TRANSFER">Chuyển khoản ngân hàng</MenuItem>
+              <MenuItem value="CASH">Tiền mặt</MenuItem>
+              <MenuItem value="MOMO">Ví MoMo</MenuItem>
+              <MenuItem value="VNPAY">VNPAY-QR</MenuItem>
+            </TextField>
+            <TextField
+              label="Mã tham chiếu / Mã giao dịch ngân hàng"
+              value={paymentRefCode}
+              onChange={(e) => setPaymentRefCode(e.target.value)}
+              fullWidth
+              size="small"
+              placeholder="VD: FT2609210001"
+            />
+            <TextField
+              label="Ghi chú thu tiền"
+              value={paymentNote}
+              onChange={(e) => setPaymentNote(e.target.value)}
+              fullWidth
+              size="small"
+              multiline
+              rows={2}
+              placeholder="VD: Khách chuyển tiền phòng kỳ 09/2026"
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setPaymentOpen(false)}>Hủy</Button>
+          <Button
+            variant="contained"
+            color="success"
+            onClick={handleRecordPayment}
+            disabled={actionLoading || !paymentAmount}
+          >
+            {actionLoading ? <CircularProgress size={24} /> : 'Xác Nhận Thu Tiền'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal 4: Payment Correction */}
+      <Dialog open={correctOpen} onClose={() => setCorrectOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 'bold' }}>
+          Sửa Bút Toán Thu Nhập Nhầm (PAYMENT_CORRECTION)
+        </DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            <Alert severity="warning">
+              Quy tắc kiểm toán BR-096: Không xóa hoặc đè record cũ. Hệ thống tạo bút toán đối trừ delta (âm) liên kết với bút toán gốc.
+            </Alert>
+            <Typography variant="body2">
+              <strong>Bút toán gốc:</strong> {targetLedgerEntry && formatVND(targetLedgerEntry.amount)} ({targetLedgerEntry?.paymentMethod})
+            </Typography>
+            <TextField
+              label="Số tiền điều chỉnh (VND delta có dấu) *"
+              type="number"
+              value={correctionDelta}
+              onChange={(e) => setCorrectionDelta(e.target.value)}
+              fullWidth
+              size="small"
+              placeholder="VD: -500000"
+              helperText="Nhập số âm nếu giảm trừ số tiền đã thu thừa"
+            />
+            <TextField
+              label="Lý do đính chính (Bắt buộc) *"
+              value={correctionReason}
+              onChange={(e) => setCorrectionReason(e.target.value)}
+              fullWidth
+              size="small"
+              multiline
+              rows={3}
+              placeholder="VD: Nhập nhầm tiền mặt của phòng khác, đính chính giảm 500k"
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setCorrectOpen(false)}>Hủy</Button>
+          <Button
+            variant="contained"
+            color="warning"
+            onClick={handleConfirmCorrection}
+            disabled={actionLoading || !correctionDelta || !correctionReason}
+          >
+            {actionLoading ? <CircularProgress size={24} /> : 'Lưu Đính Chính'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal 5: Refund Credit */}
+      <Dialog open={refundOpen} onClose={() => setRefundOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 'bold' }}>
+          Hoàn Tiền Thừa Hóa Đơn (REFUND)
+        </DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            <Alert severity="info">
+              Hoàn trả khoản dư (credit) của hóa đơn lại cho khách thuê (BR-097, EX-10).
+            </Alert>
+            <TextField
+              label="Số tiền hoàn (VND) *"
+              type="number"
+              value={refundAmount}
+              onChange={(e) => setRefundAmount(e.target.value)}
+              fullWidth
+              size="small"
+              helperText={`Số dư credit hiện có: ${formatVND(financialStatus?.credit || selectedInvoice?.credit)}`}
+            />
+            <TextField
+              label="Phương thức hoàn tiền *"
+              select
+              value={refundMethod}
+              onChange={(e) => setRefundMethod(e.target.value as PaymentMethod)}
+              fullWidth
+              size="small"
+            >
+              <MenuItem value="BANK_TRANSFER">Chuyển khoản lại cho khách</MenuItem>
+              <MenuItem value="CASH">Tiền mặt</MenuItem>
+            </TextField>
+            <TextField
+              label="Lý do hoàn tiền *"
+              value={refundReason}
+              onChange={(e) => setRefundReason(e.target.value)}
+              fullWidth
+              size="small"
+              multiline
+              rows={3}
+              placeholder="VD: Khách đóng thừa do điều chỉnh giảm giá hóa đơn"
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setRefundOpen(false)}>Hủy</Button>
+          <Button
+            variant="contained"
+            color="error"
+            onClick={handleConfirmRefund}
+            disabled={actionLoading || !refundAmount || !refundReason}
+          >
+            {actionLoading ? <CircularProgress size={24} /> : 'Xác Nhận Hoàn Tiền'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal 6: Transfer Credit */}
+      <Dialog open={transferOpen} onClose={() => setTransferOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 'bold' }}>
+          Chuyển Dư Bù Nợ Sang Hóa Đơn Khác
+        </DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            <Alert severity="info">
+              Chuyển khoản dư (credit) từ hóa đơn này sang bù trừ công nợ của hóa đơn khác (BR-098, EX-13). Không phát sinh tiền mặt mới.
+            </Alert>
+            <TextField
+              label="Chọn hóa đơn đích cần bù trừ *"
+              select
+              value={targetInvoiceId}
+              onChange={(e) => setTargetInvoiceId(e.target.value)}
+              fullWidth
+              size="small"
+            >
+              {otherDebtInvoices.length === 0 ? (
+                <MenuItem value="" disabled>Không có hóa đơn nào khác đang nợ</MenuItem>
+              ) : (
+                otherDebtInvoices.map((inv) => (
+                  <MenuItem key={inv.id} value={inv.id}>
+                    Kỳ {inv.billingMonth} — Phòng {inv.roomName} (Còn nợ: {formatVND(inv.debt)})
+                  </MenuItem>
+                ))
+              )}
+            </TextField>
+            <TextField
+              label="Số tiền chuyển dư (VND) *"
+              type="number"
+              value={transferAmount}
+              onChange={(e) => setTransferAmount(e.target.value)}
+              fullWidth
+              size="small"
+              helperText={`Credit nguồn tối đa: ${formatVND(financialStatus?.credit || selectedInvoice?.credit)}`}
+            />
+            <TextField
+              label="Lý do chuyển bù trừ *"
+              value={transferReason}
+              onChange={(e) => setTransferReason(e.target.value)}
+              fullWidth
+              size="small"
+              multiline
+              rows={3}
+              placeholder="VD: Bù trừ tiền thừa tháng trước vào hóa đơn kỳ này"
+            />
+          </Stack>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setTransferOpen(false)}>Hủy</Button>
+          <Button
+            variant="contained"
+            color="secondary"
+            onClick={handleConfirmTransfer}
+            disabled={actionLoading || !targetInvoiceId || !transferAmount || !transferReason}
+          >
+            {actionLoading ? <CircularProgress size={24} /> : 'Xác Nhận Chuyển Dư'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Modal 7: Adjust Invoice (Existing) */}
+      <Dialog open={adjustOpen} onClose={() => setAdjustOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle sx={{ fontWeight: 'bold' }}>
+          Điều Chỉnh Giá Trị Hóa Đơn (BR-081)
+        </DialogTitle>
+        <DialogContent dividers>
+          <Stack spacing={2}>
+            <Alert severity="warning">
+              Số tiền delta có dấu (+ nếu truy thu thêm, - nếu giảm trừ).
+              Hóa đơn sau điều chỉnh không được có số tiền phải nộp âm (EX-12).
+            </Alert>
+            <TextField
+              label="Số tiền điều chỉnh (VND) *"
+              type="number"
               value={adjustDelta}
               onChange={(e) => setAdjustDelta(e.target.value)}
               fullWidth
-              helperText="Nhập số âm để giảm trừ, số dương để thu bổ sung"
+              size="small"
+              placeholder="VD: -200000 hoặc 150000"
             />
             <TextField
-              label="Lý do điều chỉnh (bắt buộc)"
-              value={adjustReason}
-              onChange={(e) => setAdjustReason(e.target.value)}
-              fullWidth
-              multiline
-              rows={2}
-            />
-            <TextField
-              label="Ngày hiệu lực"
+              label="Ngày hiệu lực *"
               type="date"
               value={adjustDate}
               onChange={(e) => setAdjustDate(e.target.value)}
               InputLabelProps={{ shrink: true }}
               fullWidth
+              size="small"
+            />
+            <TextField
+              label="Lý do điều chỉnh (Bắt buộc theo kiểm toán) *"
+              value={adjustReason}
+              onChange={(e) => setAdjustReason(e.target.value)}
+              fullWidth
+              size="small"
+              multiline
+              rows={3}
+              placeholder="VD: Giảm trừ tiền mạng do đứt cáp 3 ngày"
             />
           </Stack>
         </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setAdjustOpen(false)}>Hủy</Button>
           <Button
             variant="contained"
             color="warning"
-            onClick={handleApplyAdjustment}
+            onClick={handleAdjustInvoice}
             disabled={actionLoading || !adjustDelta || !adjustReason}
           >
-            Xác Nhận Điều Chỉnh
+            {actionLoading ? <CircularProgress size={24} /> : 'Lưu Điều Chỉnh'}
           </Button>
-          <Button onClick={() => setAdjustOpen(false)}>Hủy</Button>
         </DialogActions>
       </Dialog>
 
-      {/* Note Dialog */}
+      {/* Modal 8: Add Note (Existing) */}
       <Dialog open={noteOpen} onClose={() => setNoteOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>Thêm Ghi Chú Đính Chính (Phi tài chính)</DialogTitle>
+        <DialogTitle sx={{ fontWeight: 'bold' }}>
+          Thêm Ghi Chú Đính Chính (Phi tài chính)
+        </DialogTitle>
         <DialogContent dividers>
-          <Stack spacing={2} sx={{ mt: 1 }}>
+          <Stack spacing={2}>
+            <Alert severity="info">
+              Ghi chú mô tả không làm thay đổi số tiền phải nộp của hóa đơn.
+            </Alert>
             <TextField
-              label="Nội dung đính chính"
+              label="Nội dung ghi chú *"
               value={noteContent}
               onChange={(e) => setNoteContent(e.target.value)}
               fullWidth
+              size="small"
               multiline
-              rows={2}
+              rows={3}
+              placeholder="VD: Đính chính số tài khoản chuyển khoản của khách"
             />
             <TextField
-              label="Lý do"
+              label="Lý do ghi chú *"
               value={noteReason}
               onChange={(e) => setNoteReason(e.target.value)}
               fullWidth
+              size="small"
+              placeholder="VD: Khách yêu cầu sửa ghi chú"
             />
           </Stack>
         </DialogContent>
-        <DialogActions sx={{ p: 2 }}>
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button onClick={() => setNoteOpen(false)}>Hủy</Button>
           <Button
             variant="contained"
             onClick={handleAddNote}
             disabled={actionLoading || !noteContent || !noteReason}
           >
-            Lưu Ghi Chú
+            {actionLoading ? <CircularProgress size={24} /> : 'Lưu Ghi Chú'}
           </Button>
-          <Button onClick={() => setNoteOpen(false)}>Hủy</Button>
         </DialogActions>
       </Dialog>
     </Box>

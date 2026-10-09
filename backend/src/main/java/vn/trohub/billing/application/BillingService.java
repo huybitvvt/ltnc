@@ -42,6 +42,7 @@ public class BillingService {
     private final InvoiceAdjustmentRepository invoiceAdjustmentRepository;
     private final InvoiceNoteRepository invoiceNoteRepository;
     private final FinancialOperationRepository financialOperationRepository;
+    private final InvoiceLedgerEntryRepository ledgerEntryRepository;
     private final ContractRepository contractRepository;
     private final ContractMemberRepository contractMemberRepository;
     private final RoomMeterRepository roomMeterRepository;
@@ -61,6 +62,7 @@ public class BillingService {
             InvoiceAdjustmentRepository invoiceAdjustmentRepository,
             InvoiceNoteRepository invoiceNoteRepository,
             FinancialOperationRepository financialOperationRepository,
+            InvoiceLedgerEntryRepository ledgerEntryRepository,
             ContractRepository contractRepository,
             ContractMemberRepository contractMemberRepository,
             RoomMeterRepository roomMeterRepository,
@@ -78,6 +80,7 @@ public class BillingService {
         this.invoiceAdjustmentRepository = invoiceAdjustmentRepository;
         this.invoiceNoteRepository = invoiceNoteRepository;
         this.financialOperationRepository = financialOperationRepository;
+        this.ledgerEntryRepository = ledgerEntryRepository;
         this.contractRepository = contractRepository;
         this.contractMemberRepository = contractMemberRepository;
         this.roomMeterRepository = roomMeterRepository;
@@ -688,7 +691,9 @@ public class BillingService {
             effectiveDue = BigDecimal.ZERO;
         }
 
-        BigDecimal netApplied = BigDecimal.ZERO;
+        BigDecimal netApplied = invoice.getId() != null && ledgerEntryRepository != null
+                ? ledgerEntryRepository.sumAmountByInvoiceId(invoice.getId())
+                : BigDecimal.ZERO;
         BigDecimal debt = effectiveDue.subtract(netApplied);
         if (debt.compareTo(BigDecimal.ZERO) < 0) debt = BigDecimal.ZERO;
         BigDecimal credit = netApplied.subtract(effectiveDue);
@@ -697,7 +702,7 @@ public class BillingService {
         PaymentStatus pStatus;
         if (credit.compareTo(BigDecimal.ZERO) > 0) {
             pStatus = PaymentStatus.CREDIT;
-        } else if (debt.compareTo(BigDecimal.ZERO) == 0) {
+        } else if (debt.compareTo(BigDecimal.ZERO) == 0 && netApplied.compareTo(BigDecimal.ZERO) > 0) {
             pStatus = PaymentStatus.PAID;
         } else if (netApplied.compareTo(BigDecimal.ZERO) > 0) {
             pStatus = PaymentStatus.PARTIAL;
@@ -777,7 +782,9 @@ public class BillingService {
         BigDecimal effectiveDue = originalTotal.add(adjustmentsTotal);
         if (effectiveDue.compareTo(BigDecimal.ZERO) < 0) effectiveDue = BigDecimal.ZERO;
 
-        BigDecimal netApplied = BigDecimal.ZERO;
+        BigDecimal netApplied = invoice.getId() != null && ledgerEntryRepository != null
+                ? ledgerEntryRepository.sumAmountByInvoiceId(invoice.getId())
+                : BigDecimal.ZERO;
         BigDecimal debt = effectiveDue.subtract(netApplied);
         if (debt.compareTo(BigDecimal.ZERO) < 0) debt = BigDecimal.ZERO;
         BigDecimal credit = netApplied.subtract(effectiveDue);
@@ -786,7 +793,7 @@ public class BillingService {
         PaymentStatus pStatus;
         if (credit.compareTo(BigDecimal.ZERO) > 0) {
             pStatus = PaymentStatus.CREDIT;
-        } else if (debt.compareTo(BigDecimal.ZERO) == 0) {
+        } else if (debt.compareTo(BigDecimal.ZERO) == 0 && netApplied.compareTo(BigDecimal.ZERO) > 0) {
             pStatus = PaymentStatus.PAID;
         } else if (netApplied.compareTo(BigDecimal.ZERO) > 0) {
             pStatus = PaymentStatus.PARTIAL;

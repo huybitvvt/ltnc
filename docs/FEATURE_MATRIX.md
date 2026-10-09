@@ -58,15 +58,15 @@ Trạng thái hợp lệ cho các cột: `NOT_STARTED`, `IN_PROGRESS`, `PASS`, `
 | **INV-06** | Hóa đơn & Tính tiền | Điều chỉnh tăng/giảm giá trị hóa đơn | OWNER | PASS | PASS | PASS | PASS | `BillingServiceTest.testAdjustInvoice_NegativeEffectiveDue_ThrowsException_EX12`, `testAdjustInvoice_Success` (BR-081) |
 | **INV-07** | Hóa đơn & Tính tiền | Điều chỉnh tăng/giảm giá trị hóa đơn | STAFF | PASS | PASS | PASS | PASS | `BillingService.adjustInvoice`, dialog điều chỉnh có audit trên Web & Mobile |
 | **INV-08** | Hóa đơn & Tính tiền | Thêm ghi chú đính chính mô tả hóa đơn | OWNER/STAFF| PASS | PASS | PASS | PASS | `BillingService.addInvoiceNote`, dialog ghi chú đính chính trên Web & Mobile |
-| **PAY-01** | Thu tiền & Sổ cái | Ghi nhận thu tiền hóa đơn | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **PAY-02** | Thu tiền & Sổ cái | Ghi nhận thu tiền hóa đơn trong phạm vi | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **PAY-03** | Thu tiền & Sổ cái | Sửa khoản thu nhập nhầm (PAYMENT_CORRECTION)| OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **PAY-04** | Thu tiền & Sổ cái | Sửa khoản thu nhập nhầm trong phạm vi | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **PAY-05** | Thu tiền & Sổ cái | Hoàn tiền thực tế từ khoản tiền dư | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **PAY-06** | Thu tiền & Sổ cái | Hoàn tiền thực tế từ khoản tiền dư | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **PAY-07** | Thu tiền & Sổ cái | Chuyển tiền dư giữa 2 hóa đơn cùng hợp đồng| OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **PAY-08** | Thu tiền & Sổ cái | Chuyển tiền dư giữa 2 hóa đơn cùng hợp đồng| STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **PAY-09** | Thu tiền & Sổ cái | Xem lịch sử thanh toán hóa đơn của mình | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **PAY-01** | Thu tiền & Sổ cái | Ghi nhận thu tiền hóa đơn | OWNER | PASS | PASS | PASS | PASS | `PaymentServiceTest.testRecordPayment_PartialPayment_EX08`, `PaymentService.recordPayment`, Web InvoicesPage & Mobile InvoicesScreen |
+| **PAY-02** | Thu tiền & Sổ cái | Ghi nhận thu tiền hóa đơn trong phạm vi | STAFF | PASS | PASS | PASS | PASS | `PaymentService.recordPayment`, kiểm tra phân công quản lý tòa nhà |
+| **PAY-03** | Thu tiền & Sổ cái | Sửa khoản thu nhập nhầm (PAYMENT_CORRECTION)| OWNER | PASS | PASS | PASS | PASS | `PaymentServiceTest.testCorrectPayment_DeltaCorrection_EX10`, `PaymentService.correctPayment` |
+| **PAY-04** | Thu tiền & Sổ cái | Sửa khoản thu nhập nhầm trong phạm vi | STAFF | PASS | PASS | PASS | PASS | `PaymentService.correctPayment`, dialog sửa thu bù trừ delta trên Web & Mobile |
+| **PAY-05** | Thu tiền & Sổ cái | Hoàn tiền thực tế từ khoản tiền dư | OWNER | PASS | PASS | PASS | PASS | `PaymentServiceTest.testRefundCredit_ExceedsCredit_ThrowsException_EX11`, `PaymentService.refundInvoiceCredit` |
+| **PAY-06** | Thu tiền & Sổ cái | Hoàn tiền thực tế từ khoản tiền dư | STAFF | PASS | PASS | PASS | PASS | `PaymentService.refundInvoiceCredit`, kiểm tra `credit > 0` và `amount <= credit` |
+| **PAY-07** | Thu tiền & Sổ cái | Chuyển tiền dư giữa 2 hóa đơn cùng hợp đồng| OWNER | PASS | PASS | PASS | PASS | `PaymentServiceTest.testTransferCredit_EX13`, `PaymentService.transferCredit`, đối trừ 2 entries |
+| **PAY-08** | Thu tiền & Sổ cái | Chuyển tiền dư giữa 2 hóa đơn cùng hợp đồng| STAFF | PASS | PASS | PASS | PASS | `PaymentService.transferCredit`, modal chuyển dư bù nợ trên Web InvoicesPage |
+| **PAY-09** | Thu tiền & Sổ cái | Xem lịch sử thanh toán hóa đơn của mình | TENANT | PASS | PASS | PASS | PASS | `/api/v1/invoices/{id}/financial-status`, danh sách bút toán sổ cái trên Web & Mobile |
 | **DEP-01** | Tiền cọc & Quyết toán| Ghi nhận thu tiền cọc | OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
 | **DEP-02** | Tiền cọc & Quyết toán| Ghi nhận thu tiền cọc trong phạm vi | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
 | **DEP-03** | Tiền cọc & Quyết toán| Sửa sai khoản thu cọc | OWNER/STAFF| NOT_STARTED| NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
