@@ -1,7 +1,24 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
-import { Text, Surface, Button, Chip, Divider, Portal, Dialog, TextInput, HelperText, useTheme } from 'react-native-paper';
+import React, { useState, useEffect, useCallback } from 'react';
+import { View, StyleSheet, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
+import {
+  Text,
+  Surface,
+  Button,
+  Chip,
+  Divider,
+  Portal,
+  Dialog,
+  TextInput,
+  HelperText,
+  useTheme,
+  Badge,
+  IconButton,
+  ActivityIndicator,
+} from 'react-native-paper';
 import { useMobileAuth } from '../auth/AuthContext';
+import { mobileDashboardApi, DashboardMetrics } from './dashboardApi';
+import { mobileNotificationsApi, AppNotification } from './notificationsApi';
+import { mobileApiClient } from '../auth/mobileClient';
 
 interface HomeScreenProps {
   onNavigateToStatus: () => void;
@@ -11,6 +28,13 @@ interface HomeScreenProps {
   onNavigateToInvoices?: () => void;
   onNavigateToIncidents?: () => void;
 }
+
+const formatVnd = (value?: string | number | null) => {
+  if (!value) return '0 ₫';
+  const num = typeof value === 'string' ? parseFloat(value) : value;
+  if (isNaN(num)) return '0 ₫';
+  return new Intl.NumberFormat('vi-VN').format(num) + ' ₫';
+};
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   onNavigateToStatus,
@@ -23,12 +47,34 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   const theme = useTheme();
   const { user, logout, changePassword } = useMobileAuth();
 
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Đổi mật khẩu
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [dialogError, setDialogError] = useState<string | null>(null);
   const [dialogLoading, setDialogLoading] = useState(false);
+
+  // Thông báo (Notifications)
+  const [unreadCount, setUnreadCount] = useState<number>(0);
+  const [notifDialogOpen, setNotifDialogOpen] = useState(false);
+  const [notifications, setNotifications] = useState<AppNotification[]>([]);
+  const [notifLoading, setNotifLoading] = useState(false);
+
+  // Broadcast Notification (OWNER / STAFF)
+  const [broadcastDialogOpen, setBroadcastDialogOpen] = useState(false);
+  const [broadcastTitle, setBroadcastTitle] = useState('');
+  const [broadcastMessage, setBroadcastMessage] = useState('');
+  const [buildings, setBuildings] = useState<any[]>([]);
+  const [selectedBuildingId, setSelectedBuildingId] = useState<string>('');
+  const [broadcastLoading, setBroadcastLoading] = useState(false);
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+
+  // Dashboard Metrics
+  const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
+  const [metricsLoading, setMetricsLoading] = useState(false);
 
   const roleColor = {
     OWNER: '#ef4444',
@@ -41,6 +87,115 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     STAFF: 'Nhân viên',
     TENANT: 'Khách thuê',
   }[user?.role || 'TENANT'];
+
+  const loadUnreadCount = useCallback(async () => {
+    try {
+      const count = await mobileNotificationsApi.getUnreadCount();
+      setUnreadCount(count);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const loadNotifications = useCallback(async () => {
+    setNotifLoading(true);
+    try {
+      const res = await mobileNotificationsApi.getNotifications(false, 0, 15);
+      setNotifications(res.content || []);
+    } catch {
+      // ignore
+    } finally {
+      setNotifLoading(false);
+    }
+  }, []);
+
+  const loadMetrics = useCallback(async () => {
+    if (user?.role === 'TENANT') return;
+    setMetricsLoading(true);
+    try {
+      const data = await mobileDashboardApi.getMetrics();
+      setMetrics(data);
+    } catch {
+      // ignore
+    } finally {
+      setMetricsLoading(false);
+    }
+  }, [user?.role]);
+
+  const loadBuildings = useCallback(async () => {
+    if (user?.role === 'TENANT') return;
+    try {
+      const res = await mobileApiClient.get<any>('/buildings');
+      const bList = res.data?.data || [];
+      setBuildings(bList);
+      if (bList.length > 0 && !selectedBuildingId) {
+        setSelectedBuildingId(bList[0].id);
+      }
+    } catch {
+      // ignore
+    }
+  }, [user?.role, selectedBuildingId]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await Promise.all([loadUnreadCount(), loadMetrics(), loadBuildings()]);
+    setRefreshing(false);
+  }, [loadUnreadCount, loadMetrics, loadBuildings]);
+
+  useEffect(() => {
+    loadUnreadCount();
+    loadMetrics();
+    loadBuildings();
+  }, [loadUnreadCount, loadMetrics, loadBuildings]);
+
+  const handleOpenNotifications = () => {
+    setNotifDialogOpen(true);
+    loadNotifications();
+  };
+
+  const handleMarkAsRead = async (id: string) => {
+    try {
+      await mobileNotificationsApi.markAsRead(id);
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === id ? { ...n, readAt: new Date().toISOString() } : n))
+      );
+      loadUnreadCount();
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleMarkAllAsRead = async () => {
+    try {
+      await mobileNotificationsApi.markAllAsRead();
+      setNotifications((prev) =>
+        prev.map((n) => ({ ...n, readAt: new Date().toISOString() }))
+      );
+      setUnreadCount(0);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleSendBroadcast = async () => {
+    if (!selectedBuildingId || !broadcastTitle.trim() || !broadcastMessage.trim()) return;
+    setBroadcastLoading(true);
+    try {
+      const res = await mobileNotificationsApi.broadcastNotification({
+        buildingId: selectedBuildingId,
+        title: broadcastTitle,
+        message: broadcastMessage,
+      });
+      setBroadcastDialogOpen(false);
+      setBroadcastTitle('');
+      setBroadcastMessage('');
+      setStatusMessage(`Đã gửi thông báo đến ${res.sentCount} người thuê!`);
+    } catch (err: any) {
+      setStatusMessage(err.response?.data?.message || 'Không thể phát thông báo');
+    } finally {
+      setBroadcastLoading(false);
+    }
+  };
 
   const handleChangePassword = async () => {
     if (newPassword.length < 6) {
@@ -65,8 +220,12 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   };
 
   return (
-    <ScrollView style={styles.container} contentContainerStyle={styles.content}>
-      {/* Header Profile */}
+    <ScrollView
+      style={styles.container}
+      contentContainerStyle={styles.content}
+      refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+    >
+      {/* Header Profile with Notification Bell */}
       <Surface style={styles.profileCard} elevation={2}>
         <View style={styles.profileRow}>
           <View style={styles.avatarCircle}>
@@ -85,8 +244,104 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
               </Chip>
             </View>
           </View>
+
+          {/* Bell Icon with Badge */}
+          <TouchableOpacity onPress={handleOpenNotifications} style={styles.bellButton}>
+            <IconButton icon="bell" size={26} iconColor={theme.colors.primary} />
+            {unreadCount > 0 && (
+              <Badge style={styles.badge} size={20}>
+                {unreadCount > 99 ? '99+' : unreadCount}
+              </Badge>
+            )}
+          </TouchableOpacity>
         </View>
       </Surface>
+
+      {/* Financial & Operational Summary for OWNER / STAFF (BR-148..BR-160) */}
+      {user?.role !== 'TENANT' && metrics && (
+        <>
+          <View style={styles.sectionHeaderRow}>
+            <Text variant="titleMedium" style={styles.sectionTitle}>
+              📊 Dòng tiền & Hiện trạng
+            </Text>
+            {buildings.length > 0 && (
+              <Button
+                mode="text"
+                compact
+                icon="bullhorn"
+                onPress={() => setBroadcastDialogOpen(true)}
+              >
+                Gửi thông báo
+              </Button>
+            )}
+          </View>
+
+          <Surface style={styles.metricsCard} elevation={1}>
+            <View style={styles.metricsGrid}>
+              <View style={[styles.metricItem, { backgroundColor: '#f8fafc' }]}>
+                <Text variant="labelSmall" style={styles.metricLabel}>
+                  HÓA ĐƠN ĐÃ PHÁT HÀNH
+                </Text>
+                <Text variant="titleMedium" style={[styles.metricValue, { color: '#2563eb' }]}>
+                  {formatVnd(metrics.billedAmount)}
+                </Text>
+                <Text variant="bodySmall" style={styles.metricSub}>
+                  Gốc + điều chỉnh
+                </Text>
+              </View>
+
+              <View style={[styles.metricItem, { backgroundColor: '#f0fdf4' }]}>
+                <Text variant="labelSmall" style={[styles.metricLabel, { color: '#16a34a' }]}>
+                  TIỀN THỰC THU
+                </Text>
+                <Text variant="titleMedium" style={[styles.metricValue, { color: '#16a34a' }]}>
+                  {formatVnd(metrics.cashCollected)}
+                </Text>
+                <Text variant="bodySmall" style={styles.metricSub}>
+                  Tiền mặt / CK
+                </Text>
+              </View>
+
+              <View style={[styles.metricItem, { backgroundColor: '#fffbeb' }]}>
+                <Text variant="labelSmall" style={[styles.metricLabel, { color: '#d97706' }]}>
+                  CÔNG NỢ PHẢI THU
+                </Text>
+                <Text variant="titleMedium" style={[styles.metricValue, { color: '#d97706' }]}>
+                  {formatVnd(metrics.totalDebt)}
+                </Text>
+                <Text variant="bodySmall" style={styles.metricSub}>
+                  Hóa đơn chưa thu
+                </Text>
+              </View>
+
+              <View style={[styles.metricItem, { backgroundColor: '#faf5ff' }]}>
+                <Text variant="labelSmall" style={[styles.metricLabel, { color: '#9333ea' }]}>
+                  TIỀN CỌC ĐANG GIỮ
+                </Text>
+                <Text variant="titleMedium" style={[styles.metricValue, { color: '#9333ea' }]}>
+                  {formatVnd(metrics.totalDepositHeld)}
+                </Text>
+                <Text variant="bodySmall" style={styles.metricSub}>
+                  Sổ cọc mọi HĐ (BR-157)
+                </Text>
+              </View>
+            </View>
+
+            <Divider style={{ marginVertical: 12 }} />
+
+            <View style={styles.roomStatusRow}>
+              <Text variant="bodyMedium" style={{ fontWeight: '600' }}>
+                Phòng: {metrics.occupiedRooms}/{metrics.totalRooms} đang thuê ({metrics.vacantBookableRooms} phòng trống)
+              </Text>
+              {metrics.openIssuesCount > 0 && (
+                <Chip icon="alert" style={{ backgroundColor: '#fee2e2' }} textStyle={{ color: '#dc2626', fontSize: 11 }}>
+                  {metrics.openIssuesCount} sự cố mở
+                </Chip>
+              )}
+            </View>
+          </Surface>
+        </>
+      )}
 
       {/* Action Cards */}
       <Text variant="titleMedium" style={styles.sectionTitle}>
@@ -187,71 +442,158 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
 
         <Button
           mode="outlined"
-          icon="lan-connect"
+          icon="server-network"
           onPress={onNavigateToStatus}
           style={styles.systemButton}
         >
-          Kiểm tra kết nối API
+          Trạng thái kết nối API
         </Button>
 
         <Button
           mode="contained"
+          buttonColor="#fee2e2"
+          textColor="#b91c1c"
           icon="logout"
-          buttonColor="#ef4444"
-          onPress={() => logout()}
-          style={styles.systemButton}
+          onPress={logout}
+          style={styles.logoutButton}
         >
           Đăng xuất
         </Button>
       </Surface>
 
-      {/* Modal đổi mật khẩu */}
+      {/* Modal Danh sách thông báo */}
+      <Portal>
+        <Dialog visible={notifDialogOpen} onDismiss={() => setNotifDialogOpen(false)} style={styles.dialog}>
+          <Dialog.Title style={{ fontWeight: '700' }}>🔔 Thông báo hệ thống</Dialog.Title>
+          <Dialog.ScrollArea style={{ maxHeight: 380, paddingHorizontal: 0 }}>
+            <ScrollView contentContainerStyle={{ paddingHorizontal: 16 }}>
+              {notifLoading ? (
+                <ActivityIndicator style={{ marginVertical: 32 }} />
+              ) : notifications.length === 0 ? (
+                <Text style={{ textAlign: 'center', marginVertical: 32, color: '#64748b' }}>
+                  Không có thông báo nào
+                </Text>
+              ) : (
+                notifications.map((n) => (
+                  <TouchableOpacity
+                    key={n.id}
+                    onPress={() => !n.readAt && handleMarkAsRead(n.id)}
+                    style={[styles.notifItem, { backgroundColor: n.readAt ? '#f8fafc' : '#eff6ff' }]}
+                  >
+                    <View style={styles.notifHeader}>
+                      <Text variant="labelLarge" style={{ fontWeight: n.readAt ? '600' : '800', flex: 1 }}>
+                        {n.title}
+                      </Text>
+                      {!n.readAt && <Badge size={8} style={{ backgroundColor: '#2563eb' }} />}
+                    </View>
+                    <Text variant="bodySmall" style={{ color: '#475569', marginTop: 4 }}>
+                      {n.message}
+                    </Text>
+                    <Text variant="labelSmall" style={{ color: '#94a3b8', marginTop: 6, fontSize: 10 }}>
+                      {new Date(n.createdAt).toLocaleString('vi-VN')}
+                    </Text>
+                  </TouchableOpacity>
+                ))
+              )}
+            </ScrollView>
+          </Dialog.ScrollArea>
+          <Dialog.Actions>
+            {unreadCount > 0 && (
+              <Button onPress={handleMarkAllAsRead}>Đã đọc tất cả</Button>
+            )}
+            <Button onPress={() => setNotifDialogOpen(false)}>Đóng</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      {/* Modal Broadcast Thông báo tòa nhà */}
+      <Portal>
+        <Dialog visible={broadcastDialogOpen} onDismiss={() => setBroadcastDialogOpen(false)}>
+          <Dialog.Title>📢 Phát thông báo tòa nhà</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodySmall" style={{ color: '#64748b', marginBottom: 12 }}>
+              Thông báo sẽ gửi đến tất cả người thuê phòng đang ACTIVE trong tòa nhà.
+            </Text>
+            <TextInput
+              label="Tiêu đề"
+              mode="outlined"
+              value={broadcastTitle}
+              onChangeText={setBroadcastTitle}
+              style={{ marginBottom: 12 }}
+            />
+            <TextInput
+              label="Nội dung thông báo"
+              mode="outlined"
+              multiline
+              numberOfLines={4}
+              value={broadcastMessage}
+              onChangeText={setBroadcastMessage}
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setBroadcastDialogOpen(false)}>Hủy</Button>
+            <Button
+              mode="contained"
+              loading={broadcastLoading}
+              disabled={!broadcastTitle.trim() || !broadcastMessage.trim() || broadcastLoading}
+              onPress={handleSendBroadcast}
+            >
+              Gửi
+            </Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      {/* Modal Thông báo Toast/Status */}
+      <Portal>
+        <Dialog visible={!!statusMessage} onDismiss={() => setStatusMessage(null)}>
+          <Dialog.Title>Thông báo</Dialog.Title>
+          <Dialog.Content>
+            <Text>{statusMessage}</Text>
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setStatusMessage(null)}>Đồng ý</Button>
+          </Dialog.Actions>
+        </Dialog>
+      </Portal>
+
+      {/* Modal Đổi mật khẩu */}
       <Portal>
         <Dialog visible={passwordDialogOpen} onDismiss={() => setPasswordDialogOpen(false)}>
           <Dialog.Title>Đổi mật khẩu</Dialog.Title>
           <Dialog.Content>
-            {dialogError && (
-              <HelperText type="error" visible={!!dialogError}>
-                {dialogError}
-              </HelperText>
-            )}
-
             <TextInput
               label="Mật khẩu hiện tại"
+              mode="outlined"
+              secureTextEntry
               value={oldPassword}
               onChangeText={setOldPassword}
-              secureTextEntry
-              mode="outlined"
-              style={styles.dialogInput}
-              disabled={dialogLoading}
+              style={styles.input}
             />
-
             <TextInput
-              label="Mật khẩu mới (>= 6 ký tự)"
+              label="Mật khẩu mới (ít nhất 6 ký tự)"
+              mode="outlined"
+              secureTextEntry
               value={newPassword}
               onChangeText={setNewPassword}
-              secureTextEntry
-              mode="outlined"
-              style={styles.dialogInput}
-              disabled={dialogLoading}
+              style={styles.input}
             />
-
             <TextInput
               label="Xác nhận mật khẩu mới"
+              mode="outlined"
+              secureTextEntry
               value={confirmPassword}
               onChangeText={setConfirmPassword}
-              secureTextEntry
-              mode="outlined"
-              style={styles.dialogInput}
-              disabled={dialogLoading}
+              style={styles.input}
             />
+            {dialogError && <HelperText type="error">{dialogError}</HelperText>}
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setPasswordDialogOpen(false)} disabled={dialogLoading}>
               Hủy
             </Button>
-            <Button onPress={handleChangePassword} loading={dialogLoading} disabled={dialogLoading}>
-              Xác nhận
+            <Button mode="contained" onPress={handleChangePassword} loading={dialogLoading}>
+              Cập nhật
             </Button>
           </Dialog.Actions>
         </Dialog>
@@ -270,34 +612,34 @@ const styles = StyleSheet.create({
     paddingBottom: 40,
   },
   profileCard: {
-    padding: 20,
     borderRadius: 16,
-    backgroundColor: '#ffffff',
+    padding: 16,
     marginBottom: 20,
+    backgroundColor: '#ffffff',
   },
   profileRow: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   avatarCircle: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: '#1e293b',
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: '#2563eb',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    marginRight: 14,
   },
   avatarText: {
     color: '#ffffff',
-    fontSize: 24,
+    fontSize: 22,
     fontWeight: '800',
   },
   userInfo: {
     flex: 1,
   },
   userName: {
-    fontWeight: '700',
+    fontWeight: '800',
     color: '#0f172a',
   },
   chipRow: {
@@ -305,41 +647,111 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   roleChip: {
+    borderRadius: 8,
     height: 24,
+    justifyContent: 'center',
+  },
+  bellButton: {
+    position: 'relative',
+    marginLeft: 8,
+  },
+  badge: {
+    position: 'absolute',
+    top: 6,
+    right: 6,
+    backgroundColor: '#ef4444',
+  },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+    marginTop: 4,
   },
   sectionTitle: {
+    fontWeight: '800',
+    color: '#1e293b',
+    marginBottom: 10,
+    marginTop: 10,
+  },
+  metricsCard: {
+    borderRadius: 14,
+    padding: 14,
+    marginBottom: 16,
+    backgroundColor: '#ffffff',
+  },
+  metricsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  metricItem: {
+    width: '48%',
+    borderRadius: 10,
+    padding: 10,
+  },
+  metricLabel: {
+    fontSize: 10,
     fontWeight: '700',
-    color: '#334155',
-    marginBottom: 8,
-    marginTop: 8,
+    color: '#64748b',
+  },
+  metricValue: {
+    fontWeight: '800',
+    marginVertical: 2,
+  },
+  metricSub: {
+    fontSize: 10,
+    color: '#94a3b8',
+  },
+  roomStatusRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   menuCard: {
-    borderRadius: 16,
+    borderRadius: 14,
     backgroundColor: '#ffffff',
-    overflow: 'hidden',
     marginBottom: 20,
+    overflow: 'hidden',
   },
   menuItem: {
     padding: 16,
   },
   menuItemText: {
-    fontWeight: '600',
-    color: '#1e293b',
+    fontWeight: '700',
+    color: '#0f172a',
+    marginBottom: 4,
   },
   menuItemSub: {
     color: '#64748b',
-    marginTop: 2,
   },
   systemCard: {
+    borderRadius: 14,
     padding: 16,
-    borderRadius: 16,
     backgroundColor: '#ffffff',
   },
   systemButton: {
     marginBottom: 10,
-    borderRadius: 10,
+    borderRadius: 8,
   },
-  dialogInput: {
-    marginBottom: 10,
+  logoutButton: {
+    borderRadius: 8,
+  },
+  input: {
+    marginBottom: 12,
+  },
+  dialog: {
+    borderRadius: 16,
+    backgroundColor: '#ffffff',
+  },
+  notifItem: {
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 8,
+  },
+  notifHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
 });

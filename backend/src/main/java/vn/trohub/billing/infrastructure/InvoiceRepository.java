@@ -44,4 +44,13 @@ public interface InvoiceRepository extends JpaRepository<Invoice, UUID> {
     );
 
     List<Invoice> findByContractIdOrderByBillingMonthAsc(UUID contractId);
+
+    @Query("SELECT i FROM Invoice i WHERE " +
+           "i.status = vn.trohub.billing.domain.InvoiceStatus.ISSUED AND " +
+           "(:buildingId IS NULL OR i.contract.room.building.id = :buildingId) AND " +
+           "(:billingMonth IS NULL OR i.billingMonth = :billingMonth)")
+    List<Invoice> findIssuedInvoicesForDashboard(
+            @Param("buildingId") UUID buildingId,
+            @Param("billingMonth") String billingMonth
+    );
 }

@@ -23,4 +23,7 @@ public interface RoomRepository extends JpaRepository<Room, UUID> {
 
     long countByBuildingId(UUID buildingId);
     long countByBuildingIdAndStatus(UUID buildingId, RoomStatus status);
+
+    @Query("SELECT r FROM Room r WHERE (:buildingId IS NULL OR r.building.id = :buildingId)")
+    List<Room> findRoomsForBuilding(@Param("buildingId") UUID buildingId);
 }

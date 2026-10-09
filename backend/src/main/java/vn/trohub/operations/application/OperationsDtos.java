@@ -103,4 +103,38 @@ public final class OperationsDtos {
             UUID parentId,
             Instant createdAt
     ) {}
+
+    public record NotificationDto(
+            UUID id,
+            String title,
+            String message,
+            String type,
+            String resourceType,
+            UUID resourceId,
+            Instant readAt,
+            Instant createdAt
+    ) {}
+
+    public record BroadcastNotificationRequest(
+            @NotNull UUID buildingId,
+            @NotBlank String title,
+            @NotBlank String message
+    ) {}
+
+    public record DashboardMetricsDto(
+            UUID buildingId,
+            String billingMonth,
+            String billedAmount,
+            String cashCollected,
+            String cashRefunded,
+            String netCash,
+            String totalDebt,
+            String totalCredit,
+            String totalDepositHeld,
+            int totalRooms,
+            int occupiedRooms,
+            int vacantBookableRooms,
+            int vacantBlockedRooms,
+            int openIssuesCount
+    ) {}
 }

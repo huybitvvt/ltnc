@@ -43,4 +43,9 @@ public interface ContractRepository extends JpaRepository<Contract, UUID> {
            "AND c.status <> vn.trohub.tenancy.domain.ContractStatus.DRAFT " +
            "ORDER BY c.createdAt DESC")
     Page<Contract> findTenantContracts(@Param("userId") UUID userId, Pageable pageable);
+
+    @Query("SELECT c FROM Contract c WHERE " +
+           "c.status = vn.trohub.tenancy.domain.ContractStatus.ACTIVE AND " +
+           "(:buildingId IS NULL OR c.room.building.id = :buildingId)")
+    List<Contract> findActiveContractsForBuilding(@Param("buildingId") UUID buildingId);
 }

@@ -1707,6 +1707,143 @@ paths:
         '404':
           $ref: '#/components/responses/ErrorResponse'
 
+  # ----------------------------------------------------
+  # NOTIFICATIONS (THÔNG BÁO NỘI BỘ TRONG APP)
+  # ----------------------------------------------------
+  /notifications:
+    get:
+      summary: Lấy danh sách thông báo của tài khoản hiện tại
+      operationId: listNotifications
+      tags: [Notifications]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: unreadOnly
+          in: query
+          required: false
+          schema: { type: boolean, default: false }
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/SizeParam'
+      responses:
+        '200':
+          description: Danh sách thông báo
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/NotificationPageResponse'
+
+  /notifications/unread-count:
+    get:
+      summary: Đếm số lượng thông báo chưa đọc
+      operationId: getUnreadNotificationCount
+      tags: [Notifications]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Số lượng thông báo chưa đọc
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      count: { type: integer, example: 3 }
+                  meta: { $ref: '#/components/schemas/ApiMeta' }
+
+  /notifications/{id}/read:
+    put:
+      summary: Đánh dấu một thông báo là đã đọc
+      operationId: markNotificationRead
+      tags: [Notifications]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Đã đánh dấu đọc thành công
+
+  /notifications/read-all:
+    put:
+      summary: Đánh dấu tất cả thông báo là đã đọc
+      operationId: markAllNotificationsRead
+      tags: [Notifications]
+      security:
+        - BearerAuth: []
+      responses:
+        '200':
+          description: Đã đánh dấu tất cả là đã đọc
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessMessageResponse'
+
+  /notifications/broadcast:
+    post:
+      summary: Phát thông báo toàn tòa nhà tới các hợp đồng ACTIVE (OWNER / STAFF)
+      operationId: broadcastNotification
+      tags: [Notifications]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BroadcastNotificationRequest'
+      responses:
+        '200':
+          description: Phát thông báo thành công
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: object
+                    properties:
+                      status: { type: string, example: "SUCCESS" }
+                      buildingId: { type: string, format: uuid }
+                      sentCount: { type: integer, example: 12 }
+                  meta: { $ref: '#/components/schemas/ApiMeta' }
+
+  # ----------------------------------------------------
+  # REPORTING & FINANCIAL DASHBOARD
+  # ----------------------------------------------------
+  /reporting/dashboard:
+    get:
+      summary: Lấy dữ liệu bảng điều khiển đối chiếu dòng tiền & hiện trạng phòng (BR-148..BR-160)
+      operationId: getDashboardMetrics
+      tags: [Reporting]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: buildingId
+          in: query
+          required: false
+          schema: { type: string, format: uuid }
+          description: Lọc theo tòa nhà (nếu null lấy toàn bộ phạm vi cho phép)
+        - name: billingMonth
+          in: query
+          required: false
+          schema: { type: string, example: "2026-09" }
+          description: Kỳ đối chiếu dạng YYYY-MM
+      responses:
+        '200':
+          description: Số liệu báo cáo đối chiếu tài chính và hiện trạng phòng
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DashboardMetricsResponse'
+        '403':
+          $ref: '#/components/responses/ErrorResponse'
+
 # ----------------------------------------------------
 # COMPONENTS & SCHEMAS
 # ----------------------------------------------------

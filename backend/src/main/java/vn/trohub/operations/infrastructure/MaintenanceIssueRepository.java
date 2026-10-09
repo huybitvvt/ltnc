@@ -12,4 +12,9 @@ public interface MaintenanceIssueRepository extends JpaRepository<MaintenanceIss
     List<MaintenanceIssue> findByRoomIdOrderByCreatedAtDesc(UUID roomId);
     List<MaintenanceIssue> findByStatusOrderByCreatedAtDesc(IssueStatus status);
     List<MaintenanceIssue> findAllByOrderByCreatedAtDesc();
+
+    @org.springframework.data.jpa.repository.Query("SELECT COUNT(m) FROM MaintenanceIssue m WHERE " +
+           "m.status <> vn.trohub.operations.domain.IssueStatus.CLOSED AND " +
+           "(:buildingId IS NULL OR m.room.building.id = :buildingId)")
+    long countOpenIssuesForBuilding(@org.springframework.data.repository.query.Param("buildingId") UUID buildingId);
 }

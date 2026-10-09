@@ -19,6 +19,8 @@ import {
   Avatar,
   Menu,
   MenuItem,
+  Badge,
+  Popover,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -33,7 +35,11 @@ import {
   Logout as LogoutIcon,
   Speed as StatusIcon,
   AccountCircle as AccountIcon,
+  Notifications as NotificationsIcon,
+  DoneAll as DoneAllIcon,
 } from '@mui/icons-material';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { notificationsApi } from '../../features/notifications/notificationsApi';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../../features/auth/AuthContext';
 import { ChangePasswordDialog } from '../../features/auth/ChangePasswordDialog';
@@ -50,6 +56,39 @@ export const AppLayout: React.FC = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [notifAnchorEl, setNotifAnchorEl] = useState<null | HTMLElement>(null);
+
+  const queryClient = useQueryClient();
+
+  // Polling unread count
+  const { data: unreadCount = 0 } = useQuery({
+    queryKey: ['unreadNotificationsCount'],
+    queryFn: notificationsApi.getUnreadCount,
+    refetchInterval: 30000,
+    enabled: !!user,
+  });
+
+  const { data: notificationsData } = useQuery({
+    queryKey: ['recentNotifications'],
+    queryFn: () => notificationsApi.getNotifications(false, 0, 10),
+    enabled: Boolean(notifAnchorEl),
+  });
+
+  const markAllMutation = useMutation({
+    mutationFn: notificationsApi.markAllAsRead,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['unreadNotificationsCount'] });
+      queryClient.invalidateQueries({ queryKey: ['recentNotifications'] });
+    },
+  });
+
+  const markReadMutation = useMutation({
+    mutationFn: (id: string) => notificationsApi.markAsRead(id),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['unreadNotificationsCount'] });
+      queryClient.invalidateQueries({ queryKey: ['recentNotifications'] });
+    },
+  });
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -239,6 +278,90 @@ export const AppLayout: React.FC = () => {
               size="small"
               sx={{ fontWeight: 700, px: 0.5 }}
             />
+
+            {/* Notification Bell */}
+            <IconButton onClick={(e) => setNotifAnchorEl(e.currentTarget)} size="small">
+              <Badge badgeContent={unreadCount} color="error" max={99}>
+                <NotificationsIcon color="action" />
+              </Badge>
+            </IconButton>
+
+            <Popover
+              open={Boolean(notifAnchorEl)}
+              anchorEl={notifAnchorEl}
+              onClose={() => setNotifAnchorEl(null)}
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+              transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+              PaperProps={{ sx: { width: 360, maxHeight: 480, p: 2, borderRadius: 2 } }}
+            >
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1.5 }}>
+                <Typography variant="subtitle1" fontWeight={700}>
+                  Thông báo
+                </Typography>
+                {unreadCount > 0 && (
+                  <Button
+                    size="small"
+                    startIcon={<DoneAllIcon />}
+                    onClick={() => markAllMutation.mutate()}
+                    sx={{ textTransform: 'none', fontSize: '0.75rem' }}
+                  >
+                    Đã đọc tất cả
+                  </Button>
+                )}
+              </Box>
+              <Divider sx={{ mb: 1 }} />
+
+              {(!notificationsData?.content || notificationsData.content.length === 0) ? (
+                <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 3 }}>
+                  Không có thông báo nào
+                </Typography>
+              ) : (
+                <List sx={{ p: 0 }}>
+                  {notificationsData.content.map((n) => (
+                    <ListItem
+                      key={n.id}
+                      disablePadding
+                      sx={{
+                        mb: 1,
+                        bgcolor: n.readAt ? 'transparent' : 'action.hover',
+                        borderRadius: 1.5,
+                        p: 1,
+                      }}
+                      secondaryAction={
+                        !n.readAt && (
+                          <Button
+                            size="small"
+                            onClick={() => markReadMutation.mutate(n.id)}
+                            sx={{ minWidth: 'auto', p: 0.5, fontSize: '0.7rem' }}
+                          >
+                            Đọc
+                          </Button>
+                        )
+                      }
+                    >
+                      <ListItemText
+                        primary={
+                          <Typography variant="body2" fontWeight={n.readAt ? 500 : 700}>
+                            {n.title}
+                          </Typography>
+                        }
+                        secondary={
+                          <>
+                            <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                              {n.message}
+                            </Typography>
+                            <Typography variant="caption" color="text.disabled" sx={{ fontSize: '0.65rem' }}>
+                              {new Date(n.createdAt).toLocaleString('vi-VN')}
+                            </Typography>
+                          </>
+                        }
+                      />
+                    </ListItem>
+                  ))}
+                </List>
+              )}
+            </Popover>
+
             <IconButton onClick={handleMenuOpen} size="small">
               <AccountIcon color="primary" />
             </IconButton>

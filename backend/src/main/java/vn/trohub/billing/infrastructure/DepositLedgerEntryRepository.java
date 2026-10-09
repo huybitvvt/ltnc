@@ -32,4 +32,8 @@ public interface DepositLedgerEntryRepository extends JpaRepository<DepositLedge
 
     @Query("SELECT COALESCE(SUM(d.amount), 0) FROM DepositLedgerEntry d")
     BigDecimal sumTotalDepositHeldAcrossSystem();
+
+    @Query("SELECT COALESCE(SUM(d.amount), 0) FROM DepositLedgerEntry d WHERE " +
+           "(:buildingId IS NULL OR d.contract.room.building.id = :buildingId)")
+    BigDecimal sumTotalDepositHeldByBuildingId(@Param("buildingId") UUID buildingId);
 }

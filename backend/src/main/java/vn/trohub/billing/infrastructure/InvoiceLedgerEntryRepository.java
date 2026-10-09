@@ -22,4 +22,14 @@ public interface InvoiceLedgerEntryRepository extends JpaRepository<InvoiceLedge
 
     @Query("SELECT COALESCE(SUM(e.amount), 0) FROM InvoiceLedgerEntry e WHERE e.contract.id = :contractId")
     BigDecimal sumAmountByContractId(@Param("contractId") UUID contractId);
+
+    @Query("SELECT e FROM InvoiceLedgerEntry e WHERE " +
+           "(:buildingId IS NULL OR e.contract.room.floor.building.id = :buildingId) AND " +
+           "(:fromInstant IS NULL OR e.recordedAt >= :fromInstant) AND " +
+           "(:toInstant IS NULL OR e.recordedAt < :toInstant)")
+    List<InvoiceLedgerEntry> findEntriesForDashboard(
+            @Param("buildingId") UUID buildingId,
+            @Param("fromInstant") java.time.Instant fromInstant,
+            @Param("toInstant") java.time.Instant toInstant
+    );
 }

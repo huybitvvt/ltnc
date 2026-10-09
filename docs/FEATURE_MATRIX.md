@@ -81,10 +81,11 @@ Trạng thái hợp lệ cho các cột: `NOT_STARTED`, `IN_PROGRESS`, `PASS`, `
 | **OPS-04** | Sự cố & Sửa chữa | Xác nhận hoàn tất hoặc Yêu cầu mở lại sự cố | TENANT | PASS | PASS | PASS | PASS | `OperationsServiceTest.updateIssueStatus_reopenWithoutReason_throws`, mở lại từ RESOLVED cần comment BR-127, đóng sự cố CLOSED BR-128 |
 | **OPS-05** | Phản hồi hóa đơn | Gửi phản hồi thắc mắc về hóa đơn | TENANT | PASS | PASS | PASS | PASS | `OperationsServiceTest.feedbackFlow_success`, gửi phản hồi OPEN từ hóa đơn hợp đồng BR-123 |
 | **OPS-06** | Phản hồi hóa đơn | Tiếp nhận và trả lời phản hồi hóa đơn | OWNER/STAFF| PASS | PASS | PASS | PASS | `OperationsService.replyFeedback`, hội thoại 2 chiều, tự động chuyển IN_REVIEW, xác nhận RESOLVED |
-| **NOTIF-01**| Thông báo nội bộ | Nhận thông báo tự động (hóa đơn, sự cố) | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **NOTIF-02**| Thông báo nội bộ | Quản lý soạn và gửi thông báo cho tòa | OWNER/STAFF| NOT_STARTED| NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **REP-01** | Dashboard & Báo cáo | Dashboard tổng quan tài chính và phòng toàn bộ| OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **REP-02** | Dashboard & Báo cáo | Dashboard trong phạm vi tòa nhà được giao | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **REP-03** | Dashboard & Báo cáo | Dashboard tổng quan cá nhân người thuê | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **AUDIT-01**| Lịch sử kiểm toán | Tra cứu lịch sử thao tác tài chính có phân quyền| OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **AUDIT-02**| Lịch sử kiểm toán | Tra cứu lịch sử thao tác trong phạm vi tòa | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **NOTIF-01**| Thông báo nội bộ | Nhận thông báo tự động (hóa đơn, sự cố) | TENANT | PASS | PASS | PASS | PASS | `NotificationServiceTest.testSendNotification_Success`, `testSendNotification_Deduplication_BR136`, `NotificationController`, AppLayout bell badge, Mobile HomeScreen modal |
+| **NOTIF-02**| Thông báo nội bộ | Quản lý soạn và gửi thông báo cho tòa | OWNER/STAFF| PASS | PASS | PASS | PASS | `NotificationServiceTest.testBroadcastNotification_OwnerSuccess`, modal broadcast trên Web DashboardPage & Mobile HomeScreen |
+| **REP-01** | Dashboard & Báo cáo | Dashboard tổng quan tài chính và phòng toàn bộ| OWNER | PASS | PASS | PASS | PASS | `ReportingServiceTest.testDashboardMetrics_BasicCalculations`, `testDashboardMetrics_BR154_ExcludeDepositOffsetAndCreditTransfer`, `testDashboardMetrics_EX17_DepositHeldIncludesEndedContracts`, Web DashboardPage & Mobile HomeScreen |
+| **REP-02** | Dashboard & Báo cáo | Dashboard trong phạm vi tòa nhà được giao | STAFF | PASS | PASS | PASS | PASS | `ReportingService.getDashboardMetrics`, scope validation phân công tòa nhà, Web DashboardPage dropdown lọc tòa & Mobile HomeScreen |
+| **REP-03** | Dashboard & Báo cáo | Dashboard tổng quan cá nhân người thuê | TENANT | PASS | PASS | PASS | PASS | Web DashboardPage phân quyền giao diện TENANT & Mobile HomeScreen thẻ dịch vụ cư dân |
+| **AUDIT-01**| Lịch sử kiểm toán | Tra cứu lịch sử thao tác tài chính có phân quyền| OWNER | PASS | PASS | PASS | PASS | `financial_operations` snapshot, `InvoiceLedgerEntry`, `DepositLedgerEntry`, `IssueStatusHistory`, sổ cái bất biến append-only |
+| **AUDIT-02**| Lịch sử kiểm toán | Tra cứu lịch sử thao tác trong phạm vi tòa | STAFF | PASS | PASS | PASS | PASS | Sổ cái tài chính và lịch sử sự cố bảo trì trong phạm vi tòa nhà được phân công |
+
