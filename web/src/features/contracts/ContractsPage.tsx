@@ -38,6 +38,7 @@ import BuildCircleIcon from '@mui/icons-material/BuildCircle';
 import SwapHorizIcon from '@mui/icons-material/SwapHoriz';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
 import EditIcon from '@mui/icons-material/Edit';
+import MeetingRoomIcon from '@mui/icons-material/MeetingRoom';
 import { contractsApi } from './contractsApi';
 import { BuildingItem, RoomItem } from '../property/types';
 import { ContractMemberResponse, ContractSummary, RoomMeterResponse, TenantSummary } from './types';
@@ -139,6 +140,13 @@ export const ContractsPage: React.FC = () => {
   const [extendOpen, setExtendOpen] = useState(false);
   const [newEndDate, setNewEndDate] = useState<string>('');
   const [extendReason, setExtendReason] = useState<string>('');
+
+  // Trả phòng & Bàn giao (Checkout Wizard)
+  const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [checkoutDate, setCheckoutDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [checkoutElec, setCheckoutElec] = useState<string>('0.000');
+  const [checkoutWater, setCheckoutWater] = useState<string>('0.000');
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
 
   // Thêm thành viên (Add member)
   const [addMemberOpen, setAddMemberOpen] = useState(false);
@@ -563,6 +571,57 @@ export const ContractsPage: React.FC = () => {
     }
   };
 
+  const handleOpenCheckout = () => {
+    if (!activeContract) return;
+    setCheckoutDate(new Date().toISOString().split('T')[0]);
+    const elecMeter = roomMeters.find((m) => m.type === 'ELECTRICITY');
+    const waterMeter = roomMeters.find((m) => m.type === 'WATER');
+    setCheckoutElec(elecMeter?.initialReading || '0.000');
+    setCheckoutWater(waterMeter?.initialReading || '0.000');
+    setCheckoutOpen(true);
+  };
+
+  const handleConfirmCheckout = async () => {
+    if (!activeContract) return;
+    if (checkoutDate <= activeContract.actualStartDate) {
+      alert('Ngày trả phòng thực tế phải sau ngày nhận phòng (BR-037)');
+      return;
+    }
+    setCheckoutLoading(true);
+    try {
+      const elecMeter = roomMeters.find((m) => m.type === 'ELECTRICITY');
+      const waterMeter = roomMeters.find((m) => m.type === 'WATER');
+      const readings = [
+        {
+          meterId: elecMeter?.id,
+          meterType: 'ELECTRICITY' as const,
+          readingDate: checkoutDate,
+          value: checkoutElec || '0.000',
+        },
+        {
+          meterId: waterMeter?.id,
+          meterType: 'WATER' as const,
+          readingDate: checkoutDate,
+          value: checkoutWater || '0.000',
+        },
+      ];
+      const updated = await contractsApi.checkoutContract(activeContract.id, {
+        actualCheckoutDate: checkoutDate,
+        finalReadings: readings,
+      });
+      setActiveContract(updated);
+      setSuccess('Trả phòng thành công! Phòng đã được giải phóng (VACANT), hợp đồng chuyển sang ĐÃ KẾT THÚC (ENDED), cọc chuyển sang chờ quyết toán (SETTLING).');
+      setCheckoutOpen(false);
+      await loadData();
+      await loadDepositData(activeContract.id);
+      setDetailTab(1); // Chuyển sang tab Sổ cọc để quyết toán
+    } catch (err: any) {
+      alert(err.response?.data?.message || err.message || 'Lỗi khi thực hiện trả phòng');
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
+
   const formatMoney = (val?: string) => {
     if (!val) return '0 ₫';
     return Number(val).toLocaleString('vi-VN') + ' ₫';
@@ -951,6 +1010,17 @@ export const ContractsPage: React.FC = () => {
                       }}
                     >
                       Gia Hạn Hợp Đồng
+                    </Button>
+                  )}
+                  {activeContract.status === 'ACTIVE' && (
+                    <Button
+                      variant="contained"
+                      color="error"
+                      startIcon={<MeetingRoomIcon />}
+                      onClick={handleOpenCheckout}
+                      sx={{ fontWeight: 700 }}
+                    >
+                      Trả Phòng & Kiểm Kê (Checkout)
                     </Button>
                   )}
                   <Button
@@ -1636,6 +1706,64 @@ export const ContractsPage: React.FC = () => {
               Xác Nhận Bù Cọc
             </Button>
           )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Dialog Trả Phòng & Bàn Giao (Checkout Wizard - Task E3) */}
+      <Dialog open={checkoutOpen} onClose={() => setCheckoutOpen(false)} maxWidth="sm" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
+        <DialogTitle sx={{ fontWeight: 700 }}>
+          Trả Phòng & Kiểm Kê Bàn Giao (Checkout) - Phòng {activeContract?.roomNumber}
+        </DialogTitle>
+        <DialogContent dividers>
+          <Alert severity="info" sx={{ mb: 2 }}>
+            Quy trình trả phòng nguyên tử (BR-043): Cập nhật ngày trả thực tế, lưu chỉ số điện nước cuối, kết thúc cư trú của thành viên, giải phóng phòng về trạng thái <strong>VACANT</strong> và chuyển cọc sang chờ quyết toán (<strong>SETTLING</strong>).
+          </Alert>
+          <Grid container spacing={2}>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                type="date"
+                label="Ngày trả phòng thực tế (Không tính tiền ngày này - BR-036) *"
+                InputLabelProps={{ shrink: true }}
+                required
+                value={checkoutDate}
+                onChange={(e) => setCheckoutDate(e.target.value)}
+                helperText={`Phải sau ngày nhận phòng (${activeContract?.actualStartDate}) theo quy định BR-037`}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                type="number"
+                label="Chỉ số Điện chốt trả phòng (kWh) *"
+                required
+                value={checkoutElec}
+                onChange={(e) => setCheckoutElec(e.target.value)}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                type="number"
+                label="Chỉ số Nước chốt trả phòng (m³) *"
+                required
+                value={checkoutWater}
+                onChange={(e) => setCheckoutWater(e.target.value)}
+              />
+            </Grid>
+          </Grid>
+        </DialogContent>
+        <DialogActions sx={{ p: 2 }}>
+          <Button onClick={() => setCheckoutOpen(false)}>Hủy</Button>
+          <Button
+            variant="contained"
+            color="error"
+            loading={checkoutLoading}
+            onClick={handleConfirmCheckout}
+            sx={{ fontWeight: 700 }}
+          >
+            Xác Nhận Trả Phòng
+          </Button>
         </DialogActions>
       </Dialog>
     </Box>

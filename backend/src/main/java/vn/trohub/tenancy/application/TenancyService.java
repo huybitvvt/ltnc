@@ -315,24 +315,39 @@ public class TenancyService {
 
         if (request.finalReadings() != null) {
             for (HandoverReadingItem item : request.finalReadings()) {
+                RoomMeter meter = null;
                 if (item.meterId() != null) {
-                    RoomMeter meter = roomMeterRepository.findById(item.meterId()).orElse(null);
-                    if (meter != null) {
-                        MeterReading reading = new MeterReading(
-                                meter,
-                                item.readingDate(),
-                                item.value(),
-                                MeterReadingKind.CHECKOUT,
-                                actorUser
-                        );
-                        meterReadingRepository.save(reading);
-                    }
+                    meter = roomMeterRepository.findById(item.meterId()).orElse(null);
+                } else if (item.meterType() != null) {
+                    meter = roomMeterRepository.findByRoomIdAndType(room.getId(), item.meterType()).orElse(null);
                 }
+                if (meter != null) {
+                    MeterReading reading = new MeterReading(
+                            meter,
+                            item.readingDate(),
+                            item.value(),
+                            MeterReadingKind.CHECKOUT,
+                            actorUser
+                    );
+                    meterReadingRepository.save(reading);
+                }
+            }
+        }
+
+        // Kết thúc cư trú của tất cả thành viên trong phòng (BR-043, BR-045)
+        List<ContractMember> members = contractMemberRepository.findByContractIdOrderByJoinedOnAsc(contract.getId());
+        for (ContractMember m : members) {
+            if (m.getLeftOn() == null) {
+                m.setLeftOn(request.actualCheckoutDate());
+                contractMemberRepository.save(m);
             }
         }
 
         contract.setStatus(ContractStatus.ENDED);
         contract.setActualCheckoutDate(request.actualCheckoutDate());
+        if (contract.getDepositStatus() == DepositStatus.HOLDING) {
+            contract.setDepositStatus(DepositStatus.SETTLING);
+        }
         room.setStatus(RoomStatus.VACANT);
 
         contract = contractRepository.save(contract);

@@ -269,4 +269,88 @@ class TenancyServiceTest {
         assertThat(response.inviteCode()).isEqualTo("INV-12345678");
         assertThat(response.expiresAt()).isNotNull();
     }
+
+    @Test
+    @DisplayName("Trả phòng checkout thành công: giải phóng phòng, kết thúc hợp đồng, chuyển cọc sang SETTLING và chốt ngày rời đi thành viên (BR-043)")
+    void checkoutContract_success() {
+        Contract contract = new Contract(testRoom, testTenant, LocalDate.of(2026, 9, 20),
+                LocalDate.of(2027, 4, 1), new BigDecimal("3500000"), new BigDecimal("3500000"));
+        contract.setStatus(ContractStatus.ACTIVE);
+        contract.setDepositStatus(DepositStatus.HOLDING);
+        testRoom.setStatus(RoomStatus.RENTED);
+
+        ContractMember member = new ContractMember(contract, testTenant, LocalDate.of(2026, 9, 20), true);
+        member.setLeftOn(null);
+
+        UUID meterId = UUID.randomUUID();
+        RoomMeter elecMeter = new RoomMeter(testRoom, MeterType.ELECTRICITY, "ELEC-01", LocalDate.of(2026, 9, 20), new BigDecimal("100.000"));
+        elecMeter.setId(meterId);
+        HandoverReadingItem finalReading = new HandoverReadingItem(
+                meterId,
+                MeterType.ELECTRICITY,
+                LocalDate.of(2026, 10, 10),
+                new BigDecimal("150.000")
+        );
+        CheckoutContractRequest request = new CheckoutContractRequest(
+                LocalDate.of(2026, 10, 10),
+                List.of(finalReading)
+        );
+
+        when(contractRepository.findById(contract.getId())).thenReturn(Optional.of(contract));
+        when(userRepository.findById(ownerPrincipal.getId())).thenReturn(Optional.of(managerUser));
+        when(roomMeterRepository.findById(elecMeter.getId())).thenReturn(Optional.of(elecMeter));
+        when(contractMemberRepository.findByContractIdOrderByJoinedOnAsc(contract.getId())).thenReturn(List.of(member));
+        when(contractRepository.save(any(Contract.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        ContractSummary summary = tenancyService.checkoutContract(contract.getId(), request, ownerPrincipal);
+
+        assertThat(summary.status()).isEqualTo(ContractStatus.ENDED);
+        assertThat(summary.actualCheckoutDate()).isEqualTo(LocalDate.of(2026, 10, 10));
+        assertThat(testRoom.getStatus()).isEqualTo(RoomStatus.VACANT);
+        assertThat(contract.getDepositStatus()).isEqualTo(DepositStatus.SETTLING);
+        assertThat(member.getLeftOn()).isEqualTo(LocalDate.of(2026, 10, 10));
+
+        verify(meterReadingRepository, times(1)).save(any(MeterReading.class));
+        verify(contractEventRepository, times(1)).save(any(ContractEvent.class));
+        verify(roomRepository, times(1)).save(testRoom);
+    }
+
+    @Test
+    @DisplayName("Trả phòng thất bại nếu ngày checkout không sau ngày bắt đầu theo BR-037")
+    void checkoutContract_invalidDate_throws() {
+        Contract contract = new Contract(testRoom, testTenant, LocalDate.of(2026, 9, 20),
+                LocalDate.of(2027, 4, 1), new BigDecimal("3500000"), new BigDecimal("3500000"));
+        contract.setStatus(ContractStatus.ACTIVE);
+
+        CheckoutContractRequest request = new CheckoutContractRequest(
+                LocalDate.of(2026, 9, 20), // Bằng ngày bắt đầu -> không hợp lệ
+                List.of()
+        );
+
+        when(contractRepository.findById(contract.getId())).thenReturn(Optional.of(contract));
+
+        assertThatThrownBy(() -> tenancyService.checkoutContract(contract.getId(), request, ownerPrincipal))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("BR-037");
+    }
+
+    @Test
+    @DisplayName("Trả phòng thất bại nếu hợp đồng không ở trạng thái ACTIVE")
+    void checkoutContract_notActive_throws() {
+        Contract contract = new Contract(testRoom, testTenant, LocalDate.of(2026, 9, 20),
+                LocalDate.of(2027, 4, 1), new BigDecimal("3500000"), new BigDecimal("3500000"));
+        contract.setStatus(ContractStatus.ENDED);
+
+        CheckoutContractRequest request = new CheckoutContractRequest(
+                LocalDate.of(2026, 10, 10),
+                List.of()
+        );
+
+        when(contractRepository.findById(contract.getId())).thenReturn(Optional.of(contract));
+
+        assertThatThrownBy(() -> tenancyService.checkoutContract(contract.getId(), request, ownerPrincipal))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("ACTIVE");
+    }
 }
+

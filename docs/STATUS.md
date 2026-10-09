@@ -2,26 +2,26 @@
 
 ## Checkpoint hiện tại
 
-- Trạng thái phần mềm: DEPOSITS_SETTLEMENT_COMPLETE.
-- Task vừa thực hiện: E2 — Tiền cọc, khấu trừ, hoàn cọc, bù trừ hóa đơn và quyết toán (PASS: Migration V007 + CSDL deposit_ledger_entries + Backend DepositService, DepositController, Idempotency + Web ContractsPage Sổ cọc & modals + Mobile ContractsScreen Sổ cọc & modals + 64/64 Unit Tests đạt 100%).
-- Task tiếp theo: E3 — Trả phòng, hóa đơn cuối và đối chiếu toàn luồng (Checkout & Final Invoicing - BR-041..BR-054, EX-03, EX-15..EX-17).
+- Trạng thái phần mềm: CHECKOUT_FINAL_INVOICING_COMPLETE.
+- Task vừa thực hiện: E3 — Trả phòng, hóa đơn cuối và đối chiếu toàn luồng (PASS: TenancyService checkoutContract nâng cấp membership termination nguyên tử, chỉ số bàn giao cuối kỳ, hợp đồng ENDED, phòng VACANT, cọc chuyển SETTLING, TenancyServiceTest 12/12 tests PASS + Web ContractsPage Checkout Wizard & Dialog + Mobile ContractsScreen Checkout Dialog & modal + 67/67 Unit Tests đạt 100%).
+- Task tiếp theo: F1 — Sự cố bảo trì, upload ảnh, phản hồi hóa đơn (Incidents, Attachments & Invoice Feedback - BR-123..BR-137, EX-21..EX-23).
 - Đã có:
-  - Repository Git local: commits `6d08b31` (A0), `09e9e3f` (B1), `06d491e` (B1 Status), `76e97b9` (B2 Auth), `9ac930a` (C1 Property), `d66200a` (C2 Tenancy), `5a83ea5` (D1 Pricing & Metering), `553bfdb` (D2 Invoicing), `85688bd` (E1 Payments).
+  - Repository Git local: commits `6d08b31` (A0), `09e9e3f` (B1), `06d491e` (B1 Status), `76e97b9` (B2 Auth), `9ac930a` (C1 Property), `d66200a` (C2 Tenancy), `5a83ea5` (D1 Pricing & Metering), `553bfdb` (D2 Invoicing), `85688bd` (E1 Payments), `ccfdaeb` (E2 Deposits).
   - Khóa phiên bản `docs/VERSIONS.md`, thiết kế CSDL `docs/ERD.md`, hợp đồng `docs/openapi.yaml`, ma trận `docs/FEATURE_MATRIX.md`, `README.md`.
   - Hạ tầng: `infra/compose.yaml` (PostgreSQL 16, volume, healthcheck) và `infra/.env.example`.
   - Backend:
     - Domain/Infrastructure: `Building`, `Floor`, `Room`, `TenantProfile`, `Contract`, `ContractMember`, `RoomMeter`, `MeterReading`, `ServiceDefinition`, `Tariff`, `ContractServiceSubscription`, `BuildingBillingSettings`, `OneOffCharge`, `ConsumptionAlert`, `Invoice`, `InvoiceItem`, `InvoiceAdjustment`, `InvoiceNote`, `FinancialOperation`, `InvoiceLedgerEntry`, `DepositLedgerEntry`, `DepositStatus`, `DepositEntryType`.
-    - Application/Security: `PropertyService`, `TenancyService`, `AuthService`, `UserService`, `PricingService`, `MeteringService`, `BillingService`, `PaymentService`, `DepositService`. Ràng buộc bất biến: `uq_active_room_contract`, `uq_building_service_month` (BR-066), chỉ số mới >= chỉ số cũ (BR-059, EX-07), tìm đơn giá hiệu lực `effectiveMonth <= billingMonth` (BR-067), phân bổ tiền phòng ngày ở `rent * activeDays / totalDaysInMonth` làm tròn HALF_UP đến đồng (EX-01..EX-03), phân bổ dịch vụ người-ngày (EX-05), chặn phát hành khi cảnh báo tiêu thụ chưa giải trình (BR-145), hóa đơn phát hành bất biến (BR-078), điều chỉnh hóa đơn delta có dấu `deltaAmount != 0` và `effectiveDue >= 0` (BR-081, EX-12), kiểm soát trùng lặp qua `financial_operations` (BR-103, EX-25), sổ cái bất biến append-only, sửa thu bù trừ delta `deltaAmount != 0` (BR-093..BR-096, EX-10), hoàn tiền chỉ khi có dư thừa `amount <= credit` (BR-097..BR-100, EX-11), chuyển dư cùng hợp đồng/khách thuê (EX-13, EX-14), sổ cọc append-only, hoàn/khấu trừ `amount <= depositHeld` (EX-15), bù trừ cọc trả nợ hóa đơn nguyên tử (EX-16), quyết toán cọc chỉ khi `ENDED` và `depositHeld == 0` (BR-120).
+    - Application/Security: `PropertyService`, `TenancyService`, `AuthService`, `UserService`, `PricingService`, `MeteringService`, `BillingService`, `PaymentService`, `DepositService`. Ràng buộc bất biến: `uq_active_room_contract`, `uq_building_service_month` (BR-066), chỉ số mới >= chỉ số cũ (BR-059, EX-07), tìm đơn giá hiệu lực `effectiveMonth <= billingMonth` (BR-067), phân bổ tiền phòng ngày ở `rent * activeDays / totalDaysInMonth` làm tròn HALF_UP đến đồng (EX-01..EX-03), phân bổ dịch vụ người-ngày (EX-05), chặn phát hành khi cảnh báo tiêu thụ chưa giải trình (BR-145), hóa đơn phát hành bất biến (BR-078), điều chỉnh hóa đơn delta có dấu `deltaAmount != 0` và `effectiveDue >= 0` (BR-081, EX-12), kiểm soát trùng lặp qua `financial_operations` (BR-103, EX-25), sổ cái bất biến append-only, sửa thu bù trừ delta `deltaAmount != 0` (BR-093..BR-096, EX-10), hoàn tiền chỉ khi có dư thừa `amount <= credit` (BR-097..BR-100, EX-11), chuyển dư cùng hợp đồng/khách thuê (EX-13, EX-14), sổ cọc append-only, hoàn/khấu trừ `amount <= depositHeld` (EX-15), bù trừ cọc trả nợ hóa đơn nguyên tử (EX-16), quyết toán cọc chỉ khi `ENDED` và `depositHeld == 0` (BR-120), checkout hợp đồng kết thúc membership nguyên tử `leftOn = checkoutDate`, giải phóng phòng `VACANT`, chốt chỉ số bàn giao cuối kỳ `CHECKOUT`, chuyển cọc sang `SETTLING` (BR-043, BR-045, BR-058, BR-119).
     - API Controllers & DTOs: `PropertyController`, `TenancyController`, `AuthController`, `UserController`, `PricingController`, `MeteringController`, `InvoiceController`, `PaymentController`, `DepositController`.
     - Migration: `V001__identity.sql`, `V002__property_management.sql`, `V003__tenancy_and_contracts.sql`, `V004__pricing_and_tariffs.sql`, `V005__billing_and_invoices.sql`, `V006__financial_ledgers.sql`, `V007__deposit_ledger.sql`.
-    - Unit Tests: 64/64 tests PASS (`AuthServiceTest` 7, `PropertyServiceTest` 7, `TenancyServiceTest` 9, `UserServiceTest` 3, `PricingServiceTest` 8, `MeteringServiceTest` 6, `BillingServiceTest` 9, `PaymentServiceTest` 7, `DepositServiceTest` 8).
+    - Unit Tests: 67/67 tests PASS (`AuthServiceTest` 7, `PropertyServiceTest` 7, `TenancyServiceTest` 12, `UserServiceTest` 3, `PricingServiceTest` 8, `MeteringServiceTest` 6, `BillingServiceTest` 9, `PaymentServiceTest` 7, `DepositServiceTest` 8).
   - Web:
-    - UI Components: `BuildingsPage.tsx`, `ContractsPage.tsx` (Tab Danh sách hợp đồng + Tab Quản lý Sổ cọc, Thống kê cọc, Dialog Thu cọc, Sửa thu delta, Hoàn cọc, Khấu trừ, Bù nợ hóa đơn, Xác nhận quyết toán), `MeteringPage.tsx`, `InvoicesPage.tsx`, `TenantPortalPage.tsx`, `AppRouter.tsx`, `AppLayout.tsx`.
+    - UI Components: `BuildingsPage.tsx`, `ContractsPage.tsx` (Tab Hợp đồng + Wizard Checkout trả phòng + Tab Sổ cọc, Thống kê cọc, Dialog Thu/Sửa/Hoàn/Khấu trừ/Bù nợ/Quyết toán cọc), `MeteringPage.tsx`, `InvoicesPage.tsx`, `TenantPortalPage.tsx`, `AppRouter.tsx`, `AppLayout.tsx`.
     - `typecheck` PASS, `build` PASS sinh thư mục `dist/` hoàn tất.
   - Mobile:
-    - UI Screens: `PropertyScreen.tsx`, `ContractsScreen.tsx` (Chip trạng thái cọc, Nút và Modal Sổ cọc, Thống kê cọc, Thu cọc, Hoàn cọc, Khấu trừ cọc, Bù nợ hóa đơn, Quyết toán cọc), `MeteringScreen.tsx`, `InvoicesScreen.tsx`, `HomeScreen.tsx`, `index.tsx`.
+    - UI Screens: `PropertyScreen.tsx`, `ContractsScreen.tsx` (Chip trạng thái cọc, Nút và Modal Trả phòng Checkout, Nút và Modal Sổ cọc, Thống kê cọc, Thu/Hoàn/Khấu trừ/Bù nợ/Quyết toán cọc), `MeteringScreen.tsx`, `InvoicesScreen.tsx`, `HomeScreen.tsx`, `index.tsx`.
     - `typecheck` PASS.
-  - Scripts: `scripts/verify.ps1` chạy tổng hợp: Web typecheck & build PASS, Mobile typecheck PASS, Backend compile & 64 unit tests PASS 100%.
+  - Scripts: `scripts/verify.ps1` chạy tổng hợp: Web typecheck & build PASS, Mobile typecheck PASS, Backend compile & 67 unit tests PASS 100%.
 
 ## Task checklist
 
@@ -34,7 +34,7 @@
 - [x] D2 — Tính tiền, snapshot, invoice issue/adjustment. (PASS: 49 tests, Web build, Mobile typecheck, migration V005)
 - [x] E1 — Thu tiền, correction, refund, credit transfer. (PASS: 56 tests, Web build, Mobile typecheck, migration V006)
 - [x] E2 — Cọc, offset, hoàn/khấu trừ và đối chiếu. (PASS: 64 tests, Web build, Mobile typecheck, migration V007)
-- [ ] E3 — Checkout và hóa đơn cuối kỳ xuyên suốt.
+- [x] E3 — Checkout và hóa đơn cuối kỳ xuyên suốt. (PASS: 67 tests, Web build, Mobile typecheck)
 - [ ] F1 — Sửa chữa, ảnh, phản hồi hóa đơn.
 - [ ] F2 — Thông báo và dashboard.
 - [ ] G1 — Hoàn thiện parity/UX hai client.
@@ -81,17 +81,20 @@
 | 2026-10-09 | E2 | `web` / `npm.cmd run typecheck` & `npm.cmd run build` | PASS | 11657 modules transformed, dist bundle hoàn tất |
 | 2026-10-09 | E2 | `mobile` / `npm.cmd run typecheck` | PASS | Mobile TypeScript kiểm tra thành công |
 | 2026-10-09 | E2 | `root` / `.\scripts\verify.ps1` | PASS | Toàn bộ 3 ứng dụng + 64 unit tests PASS 100% |
+| 2026-10-09 | E3 | `backend` / `.\mvnw.cmd test "-Dtest=TenancyServiceTest"` | PASS | 12/12 tests run, 0 failures, 0 errors |
+| 2026-10-09 | E3 | `web` / `npm.cmd run typecheck` & `npm.cmd run build` | PASS | 11657 modules transformed, dist bundle hoàn tất |
+| 2026-10-09 | E3 | `mobile` / `npm.cmd run typecheck` | PASS | Mobile TypeScript kiểm tra thành công |
+| 2026-10-09 | E3 | `root` / `.\scripts\verify.ps1` | PASS | Toàn bộ 3 ứng dụng + 67 unit tests PASS 100% |
 
 ## Checkpoint chi tiết
 
-- **Task / status**: E2 / PASS (Sổ cọc append-only, ghi nhận thu cọc, sửa thu delta, hoàn cọc, khấu trừ chi phí hư hại, bù trừ nợ hóa đơn nguyên tử, quyết toán cọc SETTLED khi ENDED và held=0, Web ContractsPage sổ cọc & modals, Mobile ContractsScreen sổ cọc & modals, 64/64 unit tests đạt 100%).
+- **Task / status**: E3 / PASS (Quy trình trả phòng, kết thúc cư trú thành viên, bàn giao chốt chỉ số điện nước cuối kỳ, giải phóng phòng về trống VACANT, kết thúc hợp đồng ENDED, chuyển cọc sang SETTLING chờ quyết toán; Web Checkout Wizard; Mobile Checkout Dialog; 67/67 unit tests đạt 100%).
 - **Files đã đổi / tạo mới**:
-  - `backend/`: `V007__deposit_ledger.sql`, `DepositStatus.java`, `Contract.java` (deposit fields), `DepositEntryType.java`, `DepositLedgerEntry.java`, `DepositLedgerEntryRepository.java`, `DepositDtos.java`, `DepositService.java`, `DepositController.java`, `DepositServiceTest.java`.
-  - `web/`: `types.ts` (deposits), `depositsApi.ts`, `ContractsPage.tsx` (Tab Sổ cọc & dialogs).
-  - `mobile/`: `types.ts` (deposits), `depositsApi.ts`, `types.ts` (contracts), `ContractsScreen.tsx` (Modal Sổ cọc & dialogs).
-  - `scripts/verify.ps1`: Tích hợp thêm `DepositServiceTest` (64 tests).
-  - `docs/FEATURE_MATRIX.md` (DEP-01..DEP-08 -> PASS), `docs/STATUS.md`.
-- **API/migration**: `V007__deposit_ledger.sql` (bảng `deposit_ledger_entries`, check `amount <> 0`, foreign key `contracts`, `invoices`, `financial_operations`, cột `deposit_status`, `deposit_settled_at` trong `contracts`); `/api/v1/deposits/contract/{contractId}`, `/api/v1/deposits/receipt`, `/api/v1/deposits/correct`, `/api/v1/deposits/refund`, `/api/v1/deposits/deduct`, `/api/v1/deposits/offset-invoice`, `/api/v1/deposits/settle`.
-- **Known failures/blockers**: Không có lỗi chức năng; Unit tests đạt 64/64 PASS 100%.
-- **Exact next action**: Tiến hành Task E3 — Trả phòng, hóa đơn cuối và đối chiếu toàn luồng (Checkout & Final Invoicing - BR-041..BR-054, EX-03, EX-15..EX-17).
+  - `backend/`: `TenancyService.java` (hàm `checkoutContract`), `TenancyServiceTest.java` (bổ sung 3 unit tests checkout).
+  - `web/`: `types.ts`, `contractsApi.ts`, `ContractsPage.tsx` (Checkout Wizard modal & nút Trả phòng).
+  - `mobile/`: `types.ts`, `ContractsScreen.tsx` (Checkout Dialog modal & nút Trả phòng).
+  - `docs/FEATURE_MATRIX.md` (CONT-11, CONT-12 -> PASS), `docs/STATUS.md`.
+- **API/migration**: `POST /api/v1/contracts/{id}/checkout` (kèm ngày trả phòng và mảng chỉ số điện/nước cuối kỳ).
+- **Known failures/blockers**: Không có lỗi chức năng; Unit tests đạt 67/67 PASS 100%.
+- **Exact next action**: Tiến hành Phase F: Task F1 — Sửa chữa, ảnh, phản hồi hóa đơn (Incidents, Attachments & Invoice Feedback - BR-123..BR-137, EX-21..EX-23).
 

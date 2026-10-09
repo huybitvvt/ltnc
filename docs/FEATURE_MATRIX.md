@@ -40,8 +40,8 @@ Trạng thái hợp lệ cho các cột: `NOT_STARTED`, `IN_PROGRESS`, `PASS`, `
 | **CONT-08**| Hợp đồng thuê phòng | Quản lý thành viên cùng phòng | OWNER | PASS | PASS | PASS | PASS | `TenancyServiceTest.testAddContractMember_ExceedsCapacity_ThrowsException`, modal thêm thành viên kiểm tra maxTenants |
 | **CONT-09**| Hợp đồng thuê phòng | Quản lý thành viên cùng phòng trong phạm vi | STAFF | PASS | PASS | PASS | PASS | `TenancyService.addMemberToContract`, kiểm tra sức chứa phòng |
 | **CONT-10**| Hợp đồng thuê phòng | Xem danh sách thành viên cùng phòng | TENANT | PASS | PASS | PASS | PASS | `TenantPortalPage`, `ContractsScreen` chi tiết thành viên |
-| **CONT-11**| Hợp đồng thuê phòng | Trả phòng thực tế & Giải phóng phòng | OWNER | PASS | PASS | PASS | PASS | `TenancyService.checkoutContract`, chuyển trạng thái ENDED & VACANT |
-| **CONT-12**| Hợp đồng thuê phòng | Trả phòng thực tế & Giải phóng phòng | STAFF | PASS | PASS | PASS | PASS | `TenancyService.checkoutContract` |
+| **CONT-11**| Hợp đồng thuê phòng | Trả phòng thực tế & Giải phóng phòng | OWNER | PASS | PASS | PASS | PASS | `TenancyServiceTest.checkoutContract_success` (BR-043), Web `ContractsPage` Checkout Wizard & Mobile `ContractsScreen` Checkout Dialog |
+| **CONT-12**| Hợp đồng thuê phòng | Trả phòng thực tế & Giải phóng phòng | STAFF | PASS | PASS | PASS | PASS | `TenancyService.checkoutContract`, kiểm tra phân công quản lý tòa nhà, kết thúc thành viên và chuyển cọc sang SETTLING |
 | **MET-01** | Đơn giá & Đo lường | Cấu hình loại dịch vụ | OWNER | PASS | PASS | PASS | PASS | `PricingServiceTest.testCreateServiceDefinition_Owner_Success`, `web/src/features/metering/MeteringPage` |
 | **MET-02** | Đơn giá & Đo lường | Thiết lập bảng đơn giá theo tháng hiệu lực | OWNER | PASS | PASS | PASS | PASS | `PricingServiceTest.testCreateTariff_DuplicateMonth_ThrowsException`, constraint `uq_building_service_month` |
 | **MET-03** | Đơn giá & Đo lường | Thiết lập bảng đơn giá trong phạm vi | STAFF | PASS | PASS | PASS | PASS | `PricingService.createTariff`, kiểm tra phân công quản lý tòa nhà |

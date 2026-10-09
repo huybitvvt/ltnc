@@ -30,6 +30,18 @@ export interface ContractSummary {
   depositSettledAt?: string | null;
 }
 
+export interface HandoverReadingItem {
+  meterId?: string;
+  meterType?: MeterType;
+  readingDate: string;
+  value: string;
+}
+
+export interface CheckoutContractRequest {
+  actualCheckoutDate: string;
+  finalReadings?: HandoverReadingItem[];
+}
+
 export interface ContractMemberResponse {
   id: string;
   tenantId: string;

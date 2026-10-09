@@ -44,6 +44,11 @@ export const contractsApi = {
     return res.data.data;
   },
 
+  async checkoutContract(id: string, data: { actualCheckoutDate: string; finalReadings?: HandoverReadingItem[] }): Promise<ContractSummary> {
+    const res = await apiClient.post<ApiResponse<ContractSummary>>(`/contracts/${id}/checkout`, data);
+    return res.data.data;
+  },
+
   async listContractMembers(contractId: string): Promise<ContractMemberResponse[]> {
     const res = await apiClient.get<ApiResponse<ContractMemberResponse[]>>(`/contracts/${contractId}/members`);
     return res.data.data;

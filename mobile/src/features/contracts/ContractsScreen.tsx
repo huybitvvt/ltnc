@@ -96,6 +96,14 @@ export const ContractsScreen: React.FC<ContractsScreenProps> = ({ onBack }) => {
   // Quyết toán
   const [settlingDeposit, setSettlingDeposit] = useState(false);
 
+  // Trả phòng (Checkout Wizard)
+  const [checkoutContract, setCheckoutContract] = useState<ContractSummary | null>(null);
+  const [checkoutDate, setCheckoutDate] = useState(new Date().toISOString().split('T')[0]);
+  const [checkoutElec, setCheckoutElec] = useState('0.000');
+  const [checkoutWater, setCheckoutWater] = useState('0.000');
+  const [checkoutError, setCheckoutError] = useState<string | null>(null);
+  const [checkoutLoading, setCheckoutLoading] = useState(false);
+
   // 1. Fetch contracts
   const { data: contracts = [], isLoading, isRefetching, refetch } = useQuery({
     queryKey: ['mobileContracts', statusFilter],
@@ -386,6 +394,42 @@ export const ContractsScreen: React.FC<ContractsScreenProps> = ({ onBack }) => {
     }
   };
 
+  const handleConfirmCheckout = async () => {
+    if (!checkoutContract) return;
+    if (checkoutDate <= checkoutContract.actualStartDate) {
+      setCheckoutError('Ngày trả phòng phải sau ngày nhận phòng (BR-037)');
+      return;
+    }
+    setCheckoutLoading(true);
+    setCheckoutError(null);
+    try {
+      const readings = [
+        {
+          meterType: 'ELECTRICITY' as const,
+          readingDate: checkoutDate,
+          value: checkoutElec || '0.000',
+        },
+        {
+          meterType: 'WATER' as const,
+          readingDate: checkoutDate,
+          value: checkoutWater || '0.000',
+        },
+      ];
+      await mobileApiClient.post(`/contracts/${checkoutContract.id}/checkout`, {
+        actualCheckoutDate: checkoutDate,
+        finalReadings: readings,
+      });
+      queryClient.invalidateQueries({ queryKey: ['mobileContracts'] });
+      const target = checkoutContract;
+      setCheckoutContract(null);
+      handleOpenDeposit(target);
+    } catch (err: any) {
+      setCheckoutError(err.response?.data?.message || err.message || 'Lỗi khi trả phòng');
+    } finally {
+      setCheckoutLoading(false);
+    }
+  };
+
   const formatMoney = (val?: string) => {
     if (!val) return '0 ₫';
     return Number(val).toLocaleString('vi-VN') + ' ₫';
@@ -582,19 +626,36 @@ export const ContractsScreen: React.FC<ContractsScreenProps> = ({ onBack }) => {
                   )}
 
                   {isManager && isActive && (
-                    <Button
-                      mode="contained"
-                      compact
-                      onPress={() => {
-                        setExtendError(null);
-                        setNewEndDate(c.plannedEndExclusive);
-                        setExtendReason('');
-                        setExtendContract(c);
-                      }}
-                      style={{ borderRadius: 8 }}
-                    >
-                      Gia hạn
-                    </Button>
+                    <>
+                      <Button
+                        mode="contained"
+                        compact
+                        onPress={() => {
+                          setExtendError(null);
+                          setNewEndDate(c.plannedEndExclusive);
+                          setExtendReason('');
+                          setExtendContract(c);
+                        }}
+                        style={{ borderRadius: 8 }}
+                      >
+                        Gia hạn
+                      </Button>
+                      <Button
+                        mode="contained"
+                        compact
+                        buttonColor="#dc2626"
+                        onPress={() => {
+                          setCheckoutError(null);
+                          setCheckoutDate(new Date().toISOString().split('T')[0]);
+                          setCheckoutElec('0.000');
+                          setCheckoutWater('0.000');
+                          setCheckoutContract(c);
+                        }}
+                        style={{ borderRadius: 8 }}
+                      >
+                        Trả phòng
+                      </Button>
+                    </>
                   )}
                 </View>
               </Surface>
@@ -1099,6 +1160,50 @@ export const ContractsScreen: React.FC<ContractsScreenProps> = ({ onBack }) => {
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setInviteResult(null)}>Đã xong</Button>
+          </Dialog.Actions>
+        </Dialog>
+
+        {/* Modal Trả Phòng & Kiểm Kê (Checkout - Task E3) */}
+        <Dialog visible={!!checkoutContract} onDismiss={() => setCheckoutContract(null)} style={styles.dialog}>
+          <Dialog.Title>Trả phòng: P.{checkoutContract?.roomNumber}</Dialog.Title>
+          <Dialog.Content>
+            <Text variant="bodySmall" style={{ color: '#64748b', marginBottom: 10 }}>
+              Giải phóng phòng, chốt chỉ số cuối và kết thúc hợp đồng (BR-043):
+            </Text>
+            {checkoutError && <HelperText type="error">{checkoutError}</HelperText>}
+            <TextInput
+              label="Ngày trả phòng (YYYY-MM-DD)"
+              value={checkoutDate}
+              onChangeText={setCheckoutDate}
+              mode="outlined"
+              style={{ marginBottom: 10 }}
+            />
+            <TextInput
+              label="Chỉ số Điện chốt trả phòng (kWh)"
+              value={checkoutElec}
+              onChangeText={setCheckoutElec}
+              keyboardType="decimal-pad"
+              mode="outlined"
+              style={{ marginBottom: 10 }}
+            />
+            <TextInput
+              label="Chỉ số Nước chốt trả phòng (m³)"
+              value={checkoutWater}
+              onChangeText={setCheckoutWater}
+              keyboardType="decimal-pad"
+              mode="outlined"
+            />
+          </Dialog.Content>
+          <Dialog.Actions>
+            <Button onPress={() => setCheckoutContract(null)}>Hủy</Button>
+            <Button
+              mode="contained"
+              buttonColor="#dc2626"
+              loading={checkoutLoading}
+              onPress={handleConfirmCheckout}
+            >
+              Xác nhận trả phòng
+            </Button>
           </Dialog.Actions>
         </Dialog>
       </Portal>
