@@ -9,6 +9,7 @@ interface HomeScreenProps {
   onNavigateToContracts?: () => void;
   onNavigateToMetering?: () => void;
   onNavigateToInvoices?: () => void;
+  onNavigateToIncidents?: () => void;
 }
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
@@ -17,6 +18,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onNavigateToContracts,
   onNavigateToMetering,
   onNavigateToInvoices,
+  onNavigateToIncidents,
 }) => {
   const theme = useTheme();
   const { user, logout, changePassword } = useMobileAuth();
@@ -152,14 +154,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
           </>
         )}
         <Divider />
-        <View style={styles.menuItem}>
+        <TouchableOpacity style={styles.menuItem} onPress={onNavigateToIncidents} activeOpacity={0.7}>
           <Text variant="bodyLarge" style={styles.menuItemText}>
             🛠️ Báo sự cố & Sửa chữa
           </Text>
           <Text variant="bodySmall" style={styles.menuItemSub}>
             Gửi phản ánh sự cố kỹ thuật phòng tới ban quản lý
           </Text>
-        </View>
+        </TouchableOpacity>
       </Surface>
 
       {/* System Utilities */}

@@ -94,7 +94,7 @@ export const AppLayout: React.FC = () => {
         ]
       : []),
     { text: 'Hóa đơn & Tiền phòng', icon: <ReceiptIcon />, path: '/invoices' },
-    { text: 'Yêu cầu & Sự cố', icon: <TicketIcon />, path: '/tickets' },
+    { text: 'Sự cố & Phản hồi', icon: <TicketIcon />, path: '/incidents' },
     ...(user?.role === 'OWNER'
       ? [{ text: 'Quản lý Nhân viên', icon: <UsersIcon />, path: '/users' }]
       : []),

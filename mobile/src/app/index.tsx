@@ -10,11 +10,12 @@ import { PropertyScreen } from '@/features/property/PropertyScreen';
 import { ContractsScreen } from '@/features/contracts/ContractsScreen';
 import { MeteringScreen } from '@/features/metering/MeteringScreen';
 import { InvoicesScreen } from '@/features/invoices/InvoicesScreen';
+import { IncidentsScreen } from '@/features/operations/IncidentsScreen';
 
 export default function IndexScreen() {
   const { isAuthenticated, isLoading } = useMobileAuth();
   const [authView, setAuthView] = useState<'LOGIN' | 'ACTIVATE'>('LOGIN');
-  const [mainView, setMainView] = useState<'HOME' | 'STATUS' | 'PROPERTY' | 'CONTRACTS' | 'METERING' | 'INVOICES'>('HOME');
+  const [mainView, setMainView] = useState<'HOME' | 'STATUS' | 'PROPERTY' | 'CONTRACTS' | 'METERING' | 'INVOICES' | 'INCIDENTS'>('HOME');
 
   if (isLoading) {
     return (
@@ -52,6 +53,10 @@ export default function IndexScreen() {
     return <InvoicesScreen onBack={() => setMainView('HOME')} />;
   }
 
+  if (mainView === 'INCIDENTS') {
+    return <IncidentsScreen onBack={() => setMainView('HOME')} />;
+  }
+
   return (
     <HomeScreen
       onNavigateToStatus={() => setMainView('STATUS')}
@@ -59,6 +64,7 @@ export default function IndexScreen() {
       onNavigateToContracts={() => setMainView('CONTRACTS')}
       onNavigateToMetering={() => setMainView('METERING')}
       onNavigateToInvoices={() => setMainView('INVOICES')}
+      onNavigateToIncidents={() => setMainView('INCIDENTS')}
     />
   );
 }

@@ -75,12 +75,12 @@ Trạng thái hợp lệ cho các cột: `NOT_STARTED`, `IN_PROGRESS`, `PASS`, `
 | **DEP-06** | Tiền cọc & Quyết toán| Bù trừ tiền cọc sang thanh toán hóa đơn (OFFSET_OUT)| OWNER/STAFF| PASS | PASS | PASS | PASS | `DepositServiceTest.testOffsetDepositToInvoice_EX16`, ghi đồng thời deposit offset + invoice payment trong 1 transaction |
 | **DEP-07** | Tiền cọc & Quyết toán| Xác nhận hoàn tất quyết toán cọc (SETTLED) | OWNER/STAFF| PASS | PASS | PASS | PASS | `DepositServiceTest.testSettleDeposit_Success_BR120`, `testSettleDeposit_NotEnded_ThrowsException`, chỉ khi ENDED và held=0 |
 | **DEP-08** | Tiền cọc & Quyết toán| Xem số dư cọc & lịch sử cọc của mình | TENANT | PASS | PASS | PASS | PASS | `/api/v1/deposits/contract/{contractId}`, xem sổ cọc & các bút toán trên Web & Mobile |
-| **OPS-01** | Sự cố & Sửa chữa | Báo cáo sự cố kèm ảnh | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **OPS-02** | Sự cố & Sửa chữa | Tạo và tiếp nhận sự cố trong phạm vi | STAFF | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **OPS-03** | Sự cố & Sửa chữa | Phân công nhân viên & Cập nhật tiến độ | OWNER/STAFF| NOT_STARTED| NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **OPS-04** | Sự cố & Sửa chữa | Xác nhận hoàn tất hoặc Yêu cầu mở lại sự cố | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **OPS-05** | Phản hồi hóa đơn | Gửi phản hồi thắc mắc về hóa đơn | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
-| **OPS-06** | Phản hồi hóa đơn | Tiếp nhận và trả lời phản hồi hóa đơn | OWNER/STAFF| NOT_STARTED| NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
+| **OPS-01** | Sự cố & Sửa chữa | Báo cáo sự cố kèm ảnh | TENANT | PASS | PASS | PASS | PASS | `OperationsServiceTest.createIssue_activeContract_success`, Web IncidentsPage & Mobile IncidentsScreen, upload tệp ảnh private BR-131 |
+| **OPS-02** | Sự cố & Sửa chữa | Tạo và tiếp nhận sự cố trong phạm vi | STAFF | PASS | PASS | PASS | PASS | `OperationsServiceTest.updateIssueStatus_validFlow_success`, chuyển trạng thái OPEN -> ACCEPTED |
+| **OPS-03** | Sự cố & Sửa chữa | Phân công nhân viên & Cập nhật tiến độ | OWNER/STAFF| PASS | PASS | PASS | PASS | `OperationsService.assignIssue`, `updateIssueStatus` ACCEPTED -> IN_PROGRESS -> RESOLVED |
+| **OPS-04** | Sự cố & Sửa chữa | Xác nhận hoàn tất hoặc Yêu cầu mở lại sự cố | TENANT | PASS | PASS | PASS | PASS | `OperationsServiceTest.updateIssueStatus_reopenWithoutReason_throws`, mở lại từ RESOLVED cần comment BR-127, đóng sự cố CLOSED BR-128 |
+| **OPS-05** | Phản hồi hóa đơn | Gửi phản hồi thắc mắc về hóa đơn | TENANT | PASS | PASS | PASS | PASS | `OperationsServiceTest.feedbackFlow_success`, gửi phản hồi OPEN từ hóa đơn hợp đồng BR-123 |
+| **OPS-06** | Phản hồi hóa đơn | Tiếp nhận và trả lời phản hồi hóa đơn | OWNER/STAFF| PASS | PASS | PASS | PASS | `OperationsService.replyFeedback`, hội thoại 2 chiều, tự động chuyển IN_REVIEW, xác nhận RESOLVED |
 | **NOTIF-01**| Thông báo nội bộ | Nhận thông báo tự động (hóa đơn, sự cố) | TENANT | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
 | **NOTIF-02**| Thông báo nội bộ | Quản lý soạn và gửi thông báo cho tòa | OWNER/STAFF| NOT_STARTED| NOT_STARTED | NOT_STARTED | NOT_STARTED | — |
 | **REP-01** | Dashboard & Báo cáo | Dashboard tổng quan tài chính và phòng toàn bộ| OWNER | NOT_STARTED | NOT_STARTED | NOT_STARTED | NOT_STARTED | — |

@@ -9,6 +9,7 @@ import { BuildingsPage } from '@/features/property/BuildingsPage';
 import { ContractsPage } from '@/features/contracts/ContractsPage';
 import { MeteringPage } from '@/features/metering/MeteringPage';
 import { InvoicesPage } from '@/features/invoices/InvoicesPage';
+import { IncidentsPage } from '@/features/operations/IncidentsPage';
 import { ConnectionStatusPage } from '@/features/status/ConnectionStatusPage';
 import { AppLayout } from '@/shared/components/AppLayout';
 import { ProtectedRoute } from '@/shared/components/ProtectedRoute';
@@ -91,6 +92,8 @@ export const AppRouter: React.FC = () => {
           <Route path="/meters" element={<Navigate to="/metering" replace />} />
 
           <Route path="/invoices" element={<InvoicesPage />} />
+          <Route path="/incidents" element={<IncidentsPage />} />
+          <Route path="/tickets" element={<Navigate to="/incidents" replace />} />
 
           <Route
             path="/users"

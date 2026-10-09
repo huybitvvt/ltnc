@@ -57,6 +57,13 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
     }
 
+    @ExceptionHandler(ConflictException.class)
+    public ResponseEntity<ApiError> handleConflictException(ConflictException ex) {
+        String traceId = UUID.randomUUID().toString();
+        ApiError error = ApiError.of("CONFLICT", ex.getMessage(), traceId);
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
+
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleGenericException(Exception ex) {
         String traceId = UUID.randomUUID().toString();
