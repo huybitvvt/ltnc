@@ -10,4 +10,4 @@ WORKDIR /app
 COPY --from=build --chown=trohub:trohub /source/target/trohub-backend-1.0.0-SNAPSHOT.jar app.jar
 USER trohub
 EXPOSE 8080
-ENTRYPOINT ["java", "-XX:MaxRAMPercentage=65", "-jar", "/app/app.jar"]
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=65", "-Djdk.tls.client.protocols=TLSv1.2", "-jar", "/app/app.jar"]
