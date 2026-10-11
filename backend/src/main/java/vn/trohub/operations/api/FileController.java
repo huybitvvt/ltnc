@@ -32,7 +32,7 @@ public class FileController {
     public ResponseEntity<ApiResponse<OperationsDtos.StoredFileDto>> uploadFile(
             @RequestParam("file") MultipartFile file,
             @RequestParam("parentType") ParentType parentType,
-            @RequestParam("parentId") UUID parentId,
+            @RequestParam(value = "parentId", required = false) UUID parentId,
             @AuthenticationPrincipal UserPrincipal principal
     ) {
         OperationsDtos.StoredFileDto result = operationsService.storeFile(file, parentType, parentId, principal.getId());
@@ -45,8 +45,8 @@ public class FileController {
             @PathVariable UUID id,
             @AuthenticationPrincipal UserPrincipal principal
     ) {
-        StoredFile meta = operationsService.getStoredFileMetadata(id);
-        byte[] content = operationsService.getFileContent(id);
+        StoredFile meta = operationsService.getStoredFileMetadata(id, principal);
+        byte[] content = operationsService.getFileContent(id, principal);
 
         MediaType mediaType;
         try {
@@ -57,7 +57,9 @@ public class FileController {
 
         return ResponseEntity.ok()
                 .contentType(mediaType)
-                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"" + meta.getOriginalName() + "\"")
+                .header(HttpHeaders.CACHE_CONTROL, "no-store")
+                .header("X-Content-Type-Options", "nosniff")
+                .header(HttpHeaders.CONTENT_DISPOSITION, "inline; filename=\"image\"")
                 .body(content);
     }
 }

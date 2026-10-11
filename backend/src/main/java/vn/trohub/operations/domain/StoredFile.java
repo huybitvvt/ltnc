@@ -34,7 +34,7 @@ public class StoredFile {
     @Column(name = "parent_type", nullable = false, length = 50)
     private ParentType parentType;
 
-    @Column(name = "parent_id", nullable = false)
+    @Column(name = "parent_id")
     private UUID parentId;
 
     @Column(nullable = false, length = 20)

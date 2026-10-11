@@ -1,105 +1,37 @@
 # Trạng thái triển khai
 
-## Checkpoint hiện tại
+Checkpoint: **11/10/2026 — IN_PROGRESS**. Repository public: https://github.com/huybitvvt/ltnc.
 
-- Trạng thái phần mềm: **PROJECT_COMPLETE / READY_FOR_EVALUATION**.
-- Task vừa hoàn thành:
-  - **H1 — Kiểm thử tích hợp, quyền và tính toàn vẹn** (PASS: Bổ sung 3 test suites chuyên sâu: `FinancialLifecycleIntegrityTest` cho vòng đời tài chính khép kín T-01..T-20 & EX-01..EX-20; `SecurityScopeAuthorizationTest` cho kiểm soát an ninh đa tầng RBAC và cô lập dữ liệu theo tòa nhà/khách thuê; `IdempotencyAndConcurrencyIntegrityTest` cho xử lý đồng thời, replay cache và xung đột hash payload I-01..I-14. Tổng cộng **97/97 tests PASS 100%** không một lỗi hay cảnh báo).
-  - **H2 — Đóng gói, APK Android độc lập, README và demo** (PASS: Đóng gói thành công Backend JAR `backend/target/trohub-backend-1.0.0-SNAPSHOT.jar` [SHA-256: `B15D407A865726E536A3000B5F1BEE8237179006ED60743D101F27C9CD697309`]; Xuất standalone Android Hermes Bytecode bundle độc lập `mobile/dist/_expo/static/js/android/entry-27598b9048e1f67697e81cbdd95d6c39.hbc` [3.6 MB, SHA-256: `4B43BE68511156D47DEA315720D39A83079F27181EFF5F04B12ABE4A9FAC70CD`]; Web Production Build `web/dist/` [11.661 modules transformed]; Tài liệu kịch bản `docs/DEMO_SCRIPT.md` 14 bước chi tiết; `README.md` hướng dẫn toàn diện; `scripts/verify.ps1` kiểm tra tự động cả 3 tầng hệ thống và thoát mã 0).
-- Trạng thái hạ tầng & môi trường sạch:
-  - Hạ tầng Docker Compose đã định nghĩa tại `infra/compose.yaml` (PostgreSQL 16). Trên môi trường máy phát triển hiện tại, Docker daemon chưa bật, do đó việc khởi động container live được ghi nhận là `BLOCKED (Thiếu Docker daemon của host)` minh bạch theo quy tắc `GEMINI.md`.
-  - Toàn bộ nghiệp vụ, logic số học, bảo mật và tính toàn vẹn dữ liệu được xác nhận 100% thông qua 97 tests tự động và các builds thực tế.
+Source backend, web và mobile đã có. [IMPLEMENTATION_REVIEW.md](IMPLEMENTATION_REVIEW.md) ghi kết quả trước đợt sửa này; không dùng unit test hoặc typecheck để kết luận đủ capability trên thiết bị.
 
----
+## Các phần đã sửa
 
-## 1. Đã có trong hệ thống
+- Scope theo tòa được phân công, hợp đồng của người đại diện và trạng thái ISSUED cho tài chính, sự cố, phản hồi, file. TENANT không được tự ghi thu tiền.
+- Auth tách web/mobile: cookie HttpOnly + CSRF thật trên web, SecureStore trên mobile; reset/activate dùng mã một lần, thu hồi phiên cũ; bootstrap OWNER cần bật rõ ràng và cung cấp mật khẩu.
+- Tiền VND dùng chuỗi số nguyên trong API, giới hạn 19 chữ số. Issue đòi kỳ đã đóng, đủ chỉ số tại ranh giới và biểu giá.
+- Khóa giao dịch trước kiểm tra số dư; idempotency theo actor/key/hash, lưu snapshot phản hồi. Ledger và snapshot hóa đơn đã phát hành được bảo vệ ở database.
+- Báo cáo tách kỳ hóa đơn, khoảng ngày thu tiền và ngày đối chiếu. Audit tài chính, thông báo phát hành/điều chỉnh hóa đơn và thay đổi sự cố.
+- Ảnh riêng tư được giải mã, kiểm tra kích thước, mã hóa lại; TEMP upload có hạn dọn dẹp. Web tải ảnh có xác thực; mobile nối camera/thư viện với upload.
+- Quản lý STAFF mobile, audit hai client, reset mật khẩu, tests client và CI. Compose gồm PostgreSQL 16, API, web và volume uploads.
+- Flyway có **17 migrations**. Java 17, Spring Boot 3.5.16; phiên bản tại [VERSIONS.md](VERSIONS.md).
+- Phòng không được gán tầng của tòa khác; STAFF không được tạo tầng. Form tạo/sửa tòa nhà, lưu trữ, tạo tầng, tạo/sửa phòng đã nối API trên hai client.
+- Hồ sơ người thuê không mở cho TENANT; STAFF đọc hồ sơ trong phạm vi tòa được giao, hoặc hồ sơ chưa gắn hợp đồng do chính mình tạo. Gỡ phân công có hiệu lực ngay khi request tiếp theo.
+- Chuyển dư mới ghi `CREDIT_OUT`/`CREDIT_IN`; lịch sử `CREDIT_APPLIED` giữ nguyên. Expense reference không được vừa thu trên hóa đơn vừa khấu trừ cọc.
 
-- **Repository Git local**: Các commits từ `6d08b31` (A0) đến các commit hoàn thiện toàn bộ tính năng.
-- **Tài liệu đặc tả**:
-  - `docs/DOMAIN_RULES.md`: Nguồn sự thật nghiệp vụ (Ground Truth).
-  - `docs/ERD.md`: Thiết kế CSDL chi tiết 17 bảng quan hệ, index, check constraints.
-  - `docs/openapi.yaml`: Đặc tả OpenAPI 3.0.3 đồng bộ 100% endpoint và schema.
-  - `docs/VERSIONS.md`: Khóa phiên bản công nghệ.
-  - `docs/FEATURE_MATRIX.md`: Ma trận năng lực tính năng cả 3 vai trò trên cả Web và Mobile.
-  - `docs/DEMO_SCRIPT.md`: Kịch bản demo 14 bước xuyên nền tảng.
-  - `README.md`: Hướng dẫn vận hành, tài khoản mẫu, checksum artifacts.
-- **Hạ tầng**:
-  - `infra/compose.yaml`: PostgreSQL 16 Alpine, persistent volume, healthcheck.
-  - `infra/.env.example`: Mẫu biến môi trường an toàn.
-- **Backend (Spring Boot 3.5 / Java 17)**:
-  - 12 module nghiệp vụ: `auth`, `user`, `property`, `tenancy`, `pricing`, `metering`, `billing`, `operations`, `common`.
-  - 9 Flyway migrations: `V001__identity.sql` đến `V009__notifications.sql`.
-  - **97 Unit & Integrity Tests PASS 100%**:
-    - `AuthServiceTest` (7 tests)
-    - `SecurityScopeAuthorizationTest` (3 tests)
-    - `UserServiceTest` (3 tests)
-    - `PropertyServiceTest` (7 tests)
-    - `TenancyServiceTest` (12 tests)
-    - `PricingServiceTest` (8 tests)
-    - `MeteringServiceTest` (6 tests)
-    - `BillingServiceTest` (9 tests)
-    - `PaymentServiceTest` (7 tests)
-    - `DepositServiceTest` (8 tests)
-    - `FinancialLifecycleIntegrityTest` (4 tests)
-    - `IdempotencyAndConcurrencyIntegrityTest` (3 tests)
-    - `OperationsServiceTest` (9 tests)
-    - `NotificationServiceTest` (7 tests)
-    - `ReportingServiceTest` (4 tests)
-- **Frontend Web (React 18 / TypeScript / Vite 6 / MUI v6)**:
-  - Giao diện: Dashboard đối chiếu dòng tiền, Khu trọ & Phòng, Hợp đồng, Điện nước & Cảnh báo, Hóa đơn & Sổ cái kép, Sự cố bảo trì, Cổng người thuê, Chuông thông báo (Bell badge & popover).
-  - Build: `tsc --noEmit` PASS, `vite build` PASS (thư mục `web/dist/`).
-- **Mobile App (React Native / Expo SDK 52 / Paper v5)**:
-  - Giao diện: Home Dashboard, Quản lý tài sản, Hợp đồng & Cọc, Chỉ số điện nước, Hóa đơn & Lịch sử sổ cái, Báo cáo sự cố kèm camera, Hộp thư thông báo.
-  - Build: `tsc --noEmit` PASS, Standalone Hermes Bytecode bundle export `mobile/dist/_expo/static/js/android/entry-*.hbc` PASS (3.6 MB).
-- **Scripts**:
-  - `scripts/verify.ps1`: Tự động hóa kiểm tra cả Web build, Mobile typecheck, Backend compile và toàn bộ 97 unit/integrity tests, trả về exit code 0.
+## Kiểm tra
 
----
+Lượt backend hiện tại: **110 tests, 0 failures, 0 errors, 0 skipped**, gồm 8 test tích hợp PostgreSQL và Spring context. Database local là **PostgreSQL 18.4**; không thay bằng chứng PostgreSQL 16. Typecheck hai client, 6 web tests, 2 mobile tests và production build web đã PASS. JAR Spring Boot đã package và chạy trên database riêng, Flyway tạo schema từ rỗng. Browser E2E Edge headless: **4/4 PASS** cho ba role, refresh khi reload, STAFF ngoài scope, TENANT bị chặn thu tiền và gửi lại khoản thu sau mất phản hồi không tạo phiếu trùng. Kết quả tại [evidence](evidence/final-2026-10-11/RESULTS.md).
 
-## 2. Task Checklist Toàn diện
+CI chạy Maven đầy đủ với PostgreSQL 16 qua Testcontainers, typecheck/tests hai client và production build web. Chỉ ghi CI PASS khi job thực sự hoàn tất.
 
-- [x] **A0** — Thiết kế thực thi, ERD, OpenAPI nền, versions, feature matrix. (PASS)
-- [x] **B1** — Môi trường, scaffold ba app, Flyway/Compose. (PASS)
-- [x] **B2** — Auth, tài khoản, scope và session trên hai client. (PASS: 10 tests, Web build, Mobile typecheck)
-- [x] **C1** — Khu nhà, tầng, phòng. (PASS: 17 tests, Web build, Mobile typecheck, migration V002)
-- [x] **C2** — Hồ sơ, hợp đồng, membership, bàn giao. (PASS: 26 tests, Web build, Mobile typecheck, migration V003)
-- [x] **D1** — Giá, dịch vụ, chỉ số, cảnh báo. (PASS: 40 tests, Web build, Mobile typecheck, migration V004)
-- [x] **D2** — Tính tiền, snapshot, invoice issue/adjustment. (PASS: 49 tests, Web build, Mobile typecheck, migration V005)
-- [x] **E1** — Thu tiền, correction, refund, credit transfer. (PASS: 56 tests, Web build, Mobile typecheck, migration V006)
-- [x] **E2** — Cọc, offset, hoàn/khấu trừ và đối chiếu. (PASS: 64 tests, Web build, Mobile typecheck, migration V007)
-- [x] **E3** — Checkout và hóa đơn cuối kỳ xuyên suốt. (PASS: 67 tests, Web build, Mobile typecheck)
-- [x] **F1** — Sửa chữa, ảnh, phản hồi hóa đơn. (PASS: 76 tests, Web build, Mobile typecheck, migration V008)
-- [x] **F2** — Thông báo và dashboard đối chiếu. (PASS: 87 tests, Web build, Mobile typecheck, migration V009)
-- [x] **G1** — Hoàn thiện parity/UX hai client. (PASS: 100% role capability parity, Web Build & Mobile Typecheck PASS)
-- [x] **H1** — Kiểm thử và sửa lỗi tổng thể. (PASS: 97/97 tests PASS 100%, vòng đời tài chính T-01..T-20, an ninh RBAC, Idempotency I-01..I-14)
-- [x] **H2** — Đóng gói, APK/Bundle độc lập, README và demo. (PASS: Backend JAR, Android HBC Bundle, Demo script 14 bước, README)
+**Android APK/build/cài thiết bị: DEFERRED theo yêu cầu chủ dự án ngày 11/10/2026.** Chưa nghiệm thu camera, SecureStore, lifecycle hoặc chạy khi Metro tắt trên thiết bị. Hermes bundle không phải APK. iOS chưa nghiệm thu.
 
----
+## Gate còn phải nghiệm thu
 
-## 3. Nhật ký Verification Chi tiết
+- Capability OWNER/STAFF/TENANT hai client: kiểm tra từng thao tác trong FEATURE_MATRIX; còn editor/property/pricing/member/profile và báo cáo cá nhân cần hoàn thiện/kiểm chứng.
+- Checkout: bắt buộc đủ chỉ số cuối của phòng; còn preview/final invoice/đối chiếu xuyên suốt và kiểm thử HTTP toàn vòng đời.
+- Đối chiếu expenseRef/sourceRef, đầy đủ ngày hiệu lực, thông báo/audit cho mọi mutation.
+- OpenAPI đã xuất từ runtime, ERD từ schema 34 bảng; còn seed demo idempotent, backup/restore và chạy từ checkout sạch.
+- Browser E2E, parity trên thiết bị và APK chưa nghiệm thu; không gán PASS từ typecheck.
 
-| Thời điểm | Task | CWD/lệnh | Kết quả | Bằng chứng |
-|---|---|---|---|---|
-| 2026-09-21 | A0 | `git init` | PASS | Kho lưu trữ Git local được khởi tạo |
-| 2026-09-21 | A0 | `python -c "import yaml; yaml.safe_load(open('docs/openapi.yaml', encoding='utf-8'))"` | PASS | `docs/openapi.yaml` hợp lệ 100% cú pháp OpenAPI 3.0.3 |
-| 2026-09-21 | B1 | `web` / `npm.cmd install` | PASS | Đã cài 252 packages, sinh `web/package-lock.json` |
-| 2026-09-21 | B1 | `web` / `npm.cmd run typecheck` & `npm.cmd run build` | PASS | Vite build hoàn thành 100%, tạo bundle `dist/assets` |
-| 2026-09-21 | B1 | `mobile` / `npm.cmd install` | PASS | Đã cài 938 packages, sinh `mobile/package-lock.json` |
-| 2026-09-21 | B1 | `mobile` / `npm.cmd run typecheck` | PASS | Typecheck TypeScript không lỗi |
-| 2026-09-21 | B1 | `backend` / `.\mvnw.cmd test-compile` | PASS | Biên dịch sang Java 17 bytecode |
-| 2026-09-21 | B1 | `root` / `.\scripts\verify.ps1` | PASS | Tổng hợp kiểm tra 3 thành phần đều đạt |
-| 2026-09-21 | B2 | `backend` / `.\mvnw.cmd test "-Dtest=AuthServiceTest,UserServiceTest"` | PASS | 10/10 tests run, 0 failures, 0 errors |
-| 2026-09-21 | C1 | `backend` / `.\mvnw.cmd test "-Dtest=AuthServiceTest,UserServiceTest,PropertyServiceTest"` | PASS | 17/17 tests run, 0 failures, 0 errors |
-| 2026-09-21 | C2 | `backend` / `.\mvnw.cmd test` | PASS | 26/26 tests run, 0 failures, 0 errors |
-| 2026-09-21 | D1 | `backend` / `.\mvnw.cmd test` | PASS | 40/40 tests run, 0 failures, 0 errors |
-| 2026-09-21 | D2 | `backend` / `.\mvnw.cmd test` | PASS | 49/49 tests run, 0 failures, 0 errors |
-| 2026-09-21 | E1 | `backend` / `.\mvnw.cmd test` | PASS | 56/56 tests run, 0 failures, 0 errors |
-| 2026-09-21 | E2 | `backend` / `.\mvnw.cmd test` | PASS | 64/64 tests run, 0 failures, 0 errors |
-| 2026-09-21 | E3 | `backend` / `.\mvnw.cmd test` | PASS | 67/67 tests run, 0 failures, 0 errors |
-| 2026-09-21 | F1 | `backend` / `.\mvnw.cmd test` | PASS | 76/76 tests run, 0 failures, 0 errors |
-| 2026-09-21 | F2 | `backend` / `.\mvnw.cmd test` | PASS | 87/87 tests run, 0 failures, 0 errors |
-| 2026-09-21 | G1 | `root` / `.\scripts\verify.ps1` | PASS | Client parity, route aliases, 87 tests PASS |
-| 2026-09-21 | H1 | `backend` / `.\mvnw.cmd test "-Dtest=*ServiceTest,*IntegrityTest,*AuthorizationTest"` | PASS | **97/97 tests run, 0 failures, 0 errors, 0 skipped** |
-| 2026-09-21 | H2 | `backend` / `.\mvnw.cmd package -DskipTests` | PASS | Sinh `backend/target/trohub-backend-1.0.0-SNAPSHOT.jar` (SHA-256: `B15D407A865726E536A3000B5F1BEE8237179006ED60743D101F27C9CD697309`) |
-| 2026-09-21 | H2 | `mobile` / `npx.cmd expo export --platform android` | PASS | Sinh standalone Hermes bytecode bundle `mobile/dist/_expo/static/js/android/entry-*.hbc` (3.6 MB, SHA-256: `4B43BE68511156D47DEA315720D39A83079F27181EFF5F04B12ABE4A9FAC70CD`) |
-| 2026-09-21 | H2 | `root` / `.\scripts\verify.ps1` | PASS | **Toàn bộ hệ thống Web + Mobile + Backend đạt chuẩn 100%** |
+H1/H2/G1 chưa hoàn thành toàn bộ. H2 phần Android được hoãn; các gate còn lại vẫn được xử lý.

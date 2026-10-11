@@ -38,6 +38,7 @@ import { operationsApi } from './operationsApi';
 import { IssueDto, FeedbackDto, IssueStatus, FeedbackStatus } from './types';
 import { contractsApi } from '../contracts/contractsApi';
 import { ContractSummary } from '../contracts/types';
+import { PrivateImage } from '../../shared/components/PrivateImage';
 
 export const IncidentsPage: React.FC = () => {
   const { user } = useAuth();
@@ -115,7 +116,7 @@ export const IncidentsPage: React.FC = () => {
     try {
       const uploadedFileIds: string[] = [];
       for (const file of selectedFiles) {
-        const uploaded = await operationsApi.uploadFile(file, 'MAINTENANCE_ISSUE', formContractId);
+        const uploaded = await operationsApi.uploadFile(file, 'MAINTENANCE_ISSUE');
         uploadedFileIds.push(uploaded.id);
       }
 
@@ -491,20 +492,7 @@ export const IncidentsPage: React.FC = () => {
                   <Grid container spacing={1}>
                     {selectedIssue.fileIds.map((fid) => (
                       <Grid item xs={4} sm={3} key={fid}>
-                        <Box
-                          component="img"
-                          src={operationsApi.getFileUrl(fid)}
-                          alt="Ảnh sự cố"
-                          sx={{
-                            width: '100%',
-                            height: 120,
-                            objectFit: 'cover',
-                            borderRadius: 1,
-                            border: '1px solid #ddd',
-                            cursor: 'pointer',
-                          }}
-                          onClick={() => window.open(operationsApi.getFileUrl(fid), '_blank')}
-                        />
+                        <PrivateImage fileId={fid} alt="Ảnh sự cố" />
                       </Grid>
                     ))}
                   </Grid>

@@ -27,6 +27,10 @@ import java.util.UUID;
 @Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
+    private java.time.Clock clock = java.time.Clock.systemUTC();
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setClock(java.time.Clock clock) { this.clock = clock; }
+
     private final JwtTokenProvider jwtTokenProvider;
     private final AuthSessionRepository authSessionRepository;
     private final UserRepository userRepository;
@@ -60,8 +64,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 Optional<AuthSession> sessionOpt = authSessionRepository.findById(sessionId);
                 if (sessionOpt.isPresent()) {
                     AuthSession session = sessionOpt.get();
-                    Instant now = Instant.now();
-                    if (!session.isRevoked() && !session.isExpired(now)) {
+                    Instant now = clock.instant();
+                    if (session.getUser().getId().equals(userId) && !session.isRevoked() && !session.isExpired(now)) {
                         Optional<User> userOpt = userRepository.findById(userId);
                         if (userOpt.isPresent() && userOpt.get().isEnabled()) {
                             User user = userOpt.get();

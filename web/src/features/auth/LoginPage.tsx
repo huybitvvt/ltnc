@@ -12,7 +12,10 @@ import {
   IconButton,
   Divider,
 } from '@mui/material';
-import { Visibility, VisibilityOff, LockOutlined, AccountCircle } from '@mui/icons-material';
+import Visibility from '@mui/icons-material/Visibility';
+import VisibilityOff from '@mui/icons-material/VisibilityOff';
+import LockOutlined from '@mui/icons-material/LockOutlined';
+import AccountCircle from '@mui/icons-material/AccountCircle';
 import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from './AuthContext';
 
@@ -194,6 +197,7 @@ export const LoginPage: React.FC = () => {
               >
                 Kích hoạt tài khoản bằng mã mời
               </Button>
+              <Button component={RouterLink} to="/reset-password">Đặt lại mật khẩu bằng mã được cấp</Button>
             </Box>
           </CardContent>
         </Card>

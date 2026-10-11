@@ -30,7 +30,7 @@ public class FeedbackController {
             @PathVariable UUID id,
             @AuthenticationPrincipal UserPrincipal principal
     ) {
-        List<OperationsDtos.FeedbackDto> result = operationsService.listFeedbacksByInvoice(id);
+        List<OperationsDtos.FeedbackDto> result = operationsService.listFeedbacksByInvoice(id, principal);
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
@@ -50,7 +50,7 @@ public class FeedbackController {
     public ResponseEntity<ApiResponse<List<OperationsDtos.FeedbackDto>>> getAllFeedbacks(
             @AuthenticationPrincipal UserPrincipal principal
     ) {
-        List<OperationsDtos.FeedbackDto> result = operationsService.listAllFeedbacks();
+        List<OperationsDtos.FeedbackDto> result = operationsService.listAllFeedbacks(principal);
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 

@@ -17,6 +17,16 @@ import vn.trohub.tenancy.domain.ContractStatus;
 import vn.trohub.tenancy.infrastructure.ContractRepository;
 import vn.trohub.user.domain.User;
 import vn.trohub.user.infrastructure.UserRepository;
+import vn.trohub.user.infrastructure.BuildingStaffAssignmentRepository;
+import vn.trohub.tenancy.infrastructure.MeterReadingRepository;
+import vn.trohub.common.security.AccessPolicy;
+import vn.trohub.common.security.UserPrincipal;
+import org.springframework.security.access.AccessDeniedException;
+import javax.imageio.ImageIO;
+import javax.imageio.ImageReader;
+import javax.imageio.stream.ImageInputStream;
+import java.awt.image.BufferedImage;
+import java.io.ByteArrayOutputStream;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -43,6 +53,8 @@ public class OperationsService {
     private final RoomRepository roomRepository;
     private final InvoiceRepository invoiceRepository;
     private final UserRepository userRepository;
+    private final BuildingStaffAssignmentRepository assignmentRepository;
+    private final MeterReadingRepository readingRepository;
 
     private final Path storageDirectory;
 
@@ -56,6 +68,8 @@ public class OperationsService {
             RoomRepository roomRepository,
             InvoiceRepository invoiceRepository,
             UserRepository userRepository,
+            BuildingStaffAssignmentRepository assignmentRepository,
+            MeterReadingRepository readingRepository,
             @Value("${trohub.storage.location:uploads/private}") String storageLocation
     ) {
         this.issueRepository = issueRepository;
@@ -67,6 +81,8 @@ public class OperationsService {
         this.roomRepository = roomRepository;
         this.invoiceRepository = invoiceRepository;
         this.userRepository = userRepository;
+        this.assignmentRepository = assignmentRepository;
+        this.readingRepository = readingRepository;
         this.storageDirectory = Paths.get(storageLocation).toAbsolutePath().normalize();
 
         try {
@@ -91,6 +107,9 @@ public class OperationsService {
 
         Room room = roomRepository.findById(req.roomId())
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy phòng: " + req.roomId()));
+        AccessPolicy.requireContract(contract, principal(actorId));
+        if (!contract.getRoom().getId().equals(room.getId()))
+            throw new IllegalArgumentException("Phòng không thuộc hợp đồng");
 
         User actor = userRepository.findById(actorId)
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy người dùng: " + actorId));
@@ -116,13 +135,15 @@ public class OperationsService {
         List<UUID> attachedFileIds = new ArrayList<>();
         if (req.fileIds() != null) {
             for (UUID fileId : req.fileIds()) {
-                storedFileRepository.findById(fileId).ifPresent(file -> {
+                StoredFile file = storedFileRepository.findById(fileId)
+                        .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy ảnh"));
+                if (!file.getUploadedBy().getId().equals(actorId) || !"TEMPORARY".equals(file.getStatus()))
+                    throw new AccessDeniedException("Chỉ được gắn ảnh tạm do mình tải lên");
                     file.setParentType(ParentType.MAINTENANCE_ISSUE);
                     file.setParentId(savedIssue.getId());
                     file.setStatus("ATTACHED");
                     storedFileRepository.save(file);
                     attachedFileIds.add(file.getId());
-                });
             }
         }
 
@@ -130,9 +151,10 @@ public class OperationsService {
     }
 
     @Transactional(readOnly = true)
-    public OperationsDtos.IssueDto getIssue(UUID id) {
+    public OperationsDtos.IssueDto getIssue(UUID id, UserPrincipal principal) {
         MaintenanceIssue issue = issueRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy sự cố: " + id));
+        AccessPolicy.requireContract(issue.getContract(), principal);
 
         List<StoredFile> files = storedFileRepository.findByParentTypeAndParentId(ParentType.MAINTENANCE_ISSUE, id);
         List<UUID> fileIds = files.stream().map(StoredFile::getId).toList();
@@ -146,7 +168,7 @@ public class OperationsService {
     }
 
     @Transactional(readOnly = true)
-    public List<OperationsDtos.IssueDto> listIssues(UUID contractId, UUID roomId, IssueStatus status) {
+    public List<OperationsDtos.IssueDto> listIssues(UUID contractId, UUID roomId, IssueStatus status, UserPrincipal principal) {
         List<MaintenanceIssue> issues;
         if (contractId != null) {
             issues = issueRepository.findByContractIdOrderByCreatedAtDesc(contractId);
@@ -158,7 +180,9 @@ public class OperationsService {
             issues = issueRepository.findAllByOrderByCreatedAtDesc();
         }
 
-        return issues.stream().map(issue -> {
+        return issues.stream().filter(issue -> AccessPolicy.canRead(issue.getContract(), principal))
+                .filter(issue -> status == null || issue.getStatus() == status)
+                .filter(issue -> roomId == null || issue.getRoom().getId().equals(roomId)).map(issue -> {
             List<StoredFile> files = storedFileRepository.findByParentTypeAndParentId(ParentType.MAINTENANCE_ISSUE, issue.getId());
             List<UUID> fileIds = files.stream().map(StoredFile::getId).toList();
             return toIssueDto(issue, fileIds, Collections.emptyList());
@@ -174,6 +198,14 @@ public class OperationsService {
 
         IssueStatus current = issue.getStatus();
         IssueStatus target = req.status();
+        UserPrincipal caller = principal(actorId);
+        AccessPolicy.requireContract(issue.getContract(), caller);
+        if (caller.isTenant() && (!issue.getCreatedBy().getId().equals(actorId)
+                || current != IssueStatus.RESOLVED
+                || (target != IssueStatus.CLOSED && target != IssueStatus.IN_PROGRESS)))
+            throw new AccessDeniedException("Người báo chỉ được xác nhận hoặc mở lại sự cố đã xử lý");
+        if (!caller.isTenant() && target == IssueStatus.CLOSED && (req.comment() == null || req.comment().isBlank()))
+            throw new IllegalArgumentException("Quản lý đóng sự cố phải ghi lý do");
 
         if (current == target) {
             // Không đổi trạng thái, cập nhật comment nếu có
@@ -181,7 +213,7 @@ public class OperationsService {
                 IssueStatusHistory history = new IssueStatusHistory(issue, current, target, req.comment(), actor);
                 issueHistoryRepository.save(history);
             }
-            return getIssue(id);
+            return getIssue(id, caller);
         }
 
         // Kiểm tra chuyển trạng thái hợp lệ (BR-126..BR-128, trả 409 Conflict nếu sai)
@@ -194,7 +226,7 @@ public class OperationsService {
         IssueStatusHistory history = new IssueStatusHistory(issue, current, target, req.comment(), actor);
         issueHistoryRepository.save(history);
 
-        return getIssue(id);
+        return getIssue(id, caller);
     }
 
     public OperationsDtos.IssueDto assignIssue(UUID id, UUID assigneeId, UUID actorId) {
@@ -206,6 +238,8 @@ public class OperationsService {
 
         User actor = userRepository.findById(actorId)
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy người dùng: " + actorId));
+        AccessPolicy.requireManager(issue.getContract(), principal(actorId));
+        AccessPolicy.requireManager(issue.getContract(), principal(assigneeId));
 
         issue.setAssignee(assignee);
         issue.setUpdatedAt(Instant.now());
@@ -217,7 +251,7 @@ public class OperationsService {
         }
         issueRepository.save(issue);
 
-        return getIssue(id);
+        return getIssue(id, principal(actorId));
     }
 
     private void validateStatusTransition(IssueStatus current, IssueStatus target, String comment) {
@@ -259,6 +293,7 @@ public class OperationsService {
     public OperationsDtos.FeedbackDto createFeedback(UUID invoiceId, OperationsDtos.CreateFeedbackRequest req, UUID actorId) {
         Invoice invoice = invoiceRepository.findById(invoiceId)
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy hóa đơn: " + invoiceId));
+        AccessPolicy.requireInvoice(invoice, principal(actorId));
 
         User actor = userRepository.findById(actorId)
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy người dùng: " + actorId));
@@ -270,7 +305,9 @@ public class OperationsService {
     }
 
     @Transactional(readOnly = true)
-    public List<OperationsDtos.FeedbackDto> listFeedbacksByInvoice(UUID invoiceId) {
+    public List<OperationsDtos.FeedbackDto> listFeedbacksByInvoice(UUID invoiceId, UserPrincipal principal) {
+        AccessPolicy.requireInvoice(invoiceRepository.findById(invoiceId)
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy hóa đơn")), principal);
         List<InvoiceFeedback> list = feedbackRepository.findByInvoiceIdOrderByCreatedAtDesc(invoiceId);
         return list.stream().map(fb -> {
             List<InvoiceFeedbackReply> replies = feedbackReplyRepository.findByFeedbackIdOrderByCreatedAtAsc(fb.getId());
@@ -280,9 +317,10 @@ public class OperationsService {
     }
 
     @Transactional(readOnly = true)
-    public List<OperationsDtos.FeedbackDto> listAllFeedbacks() {
+    public List<OperationsDtos.FeedbackDto> listAllFeedbacks(UserPrincipal principal) {
         List<InvoiceFeedback> list = feedbackRepository.findAllByOrderByCreatedAtDesc();
-        return list.stream().map(fb -> {
+        return list.stream().filter(fb -> AccessPolicy.canRead(fb.getInvoice().getContract(), principal)
+                && (!principal.isTenant() || fb.getInvoice().getStatus() == vn.trohub.billing.domain.InvoiceStatus.ISSUED)).map(fb -> {
             List<InvoiceFeedbackReply> replies = feedbackReplyRepository.findByFeedbackIdOrderByCreatedAtAsc(fb.getId());
             List<OperationsDtos.FeedbackReplyDto> replyDtos = replies.stream().map(this::toReplyDto).toList();
             return toFeedbackDto(fb, replyDtos);
@@ -292,6 +330,7 @@ public class OperationsService {
     public OperationsDtos.FeedbackDto replyFeedback(UUID feedbackId, OperationsDtos.ReplyFeedbackRequest req, UUID actorId) {
         InvoiceFeedback feedback = feedbackRepository.findById(feedbackId)
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy phản hồi: " + feedbackId));
+        AccessPolicy.requireInvoice(feedback.getInvoice(), principal(actorId));
 
         User actor = userRepository.findById(actorId)
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy người dùng: " + actorId));
@@ -314,6 +353,7 @@ public class OperationsService {
     public OperationsDtos.FeedbackDto updateFeedbackStatus(UUID feedbackId, FeedbackStatus newStatus, UUID actorId) {
         InvoiceFeedback feedback = feedbackRepository.findById(feedbackId)
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy phản hồi: " + feedbackId));
+        AccessPolicy.requireManager(feedback.getInvoice().getContract(), principal(actorId));
 
         feedback.setStatus(newStatus);
         feedback.setUpdatedAt(Instant.now());
@@ -349,22 +389,28 @@ public class OperationsService {
         if (verifiedMimeType == null || !ALLOWED_MIME_TYPES.contains(verifiedMimeType)) {
             throw new IllegalArgumentException("Nội dung tệp thực tế không phải ảnh JPEG, PNG hoặc WebP hợp lệ (BR-131)");
         }
+        if (!verifiedMimeType.equalsIgnoreCase(declaredContentType))
+            throw new IllegalArgumentException("Loại ảnh khai báo không khớp nội dung tệp");
 
         User uploader = userRepository.findById(uploaderId)
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy người dùng tải lên: " + uploaderId));
 
-        String extension = switch (verifiedMimeType) {
-            case "image/jpeg" -> ".jpg";
-            case "image/png" -> ".png";
-            case "image/webp" -> ".webp";
-            default -> ".bin";
-        };
+        UserPrincipal caller = principal(uploaderId);
+        if (parentId != null) {
+            requireParent(parentType, parentId, caller);
+            if (storedFileRepository.findByParentTypeAndParentId(parentType, parentId).size() >= 5)
+                throw new IllegalArgumentException("Mỗi bản ghi chỉ được đính kèm tối đa 5 ảnh");
+        }
+        String encoding = verifiedMimeType.equals("image/jpeg") ? "jpeg" : "png";
+        byte[] normalized = normalizeImage(file, encoding);
+        verifiedMimeType = "image/" + encoding;
+        String extension = "." + encoding;
 
         String storageFileName = UUID.randomUUID() + extension;
         Path targetPath = this.storageDirectory.resolve(storageFileName).normalize();
 
-        try (InputStream in = file.getInputStream()) {
-            Files.copy(in, targetPath, StandardCopyOption.REPLACE_EXISTING);
+        try {
+            Files.write(targetPath, normalized);
         } catch (IOException e) {
             throw new RuntimeException("Lỗi lưu trữ tệp tin vào đĩa: " + e.getMessage(), e);
         }
@@ -373,26 +419,45 @@ public class OperationsService {
                 storageFileName,
                 file.getOriginalFilename() != null ? file.getOriginalFilename() : storageFileName,
                 verifiedMimeType,
-                file.getSize(),
+                (long) normalized.length,
                 uploader,
                 parentType,
                 parentId
         );
+        if (parentId == null) storedFile.setStatus("TEMPORARY");
         StoredFile saved = storedFileRepository.save(storedFile);
+        if (org.springframework.transaction.support.TransactionSynchronizationManager.isSynchronizationActive()) {
+            org.springframework.transaction.support.TransactionSynchronizationManager.registerSynchronization(
+                    new org.springframework.transaction.support.TransactionSynchronization() {
+                        @Override public void afterCompletion(int status) {
+                            if (status != STATUS_COMMITTED) {
+                                try { Files.deleteIfExists(targetPath); } catch (IOException ignored) { }
+                            }
+                        }
+                    });
+        }
 
         return toStoredFileDto(saved);
     }
 
     @Transactional(readOnly = true)
-    public StoredFile getStoredFileMetadata(UUID id) {
-        return storedFileRepository.findById(id)
+    public StoredFile getStoredFileMetadata(UUID id, UserPrincipal principal) {
+        StoredFile file = storedFileRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy tệp đính kèm: " + id));
+        if ("TEMPORARY".equals(file.getStatus())) {
+            if (!file.getUploadedBy().getId().equals(principal.getId()))
+                throw new AccessDeniedException("Ảnh tạm chỉ dành cho người tải lên");
+        } else {
+            requireParent(file.getParentType(), file.getParentId(), principal);
+        }
+        return file;
     }
 
     @Transactional(readOnly = true)
-    public byte[] getFileContent(UUID id) {
-        StoredFile fileMeta = getStoredFileMetadata(id);
+    public byte[] getFileContent(UUID id, UserPrincipal principal) {
+        StoredFile fileMeta = getStoredFileMetadata(id, principal);
         Path filePath = this.storageDirectory.resolve(fileMeta.getStorageKey()).normalize();
+        if (!filePath.startsWith(storageDirectory)) throw new AccessDeniedException("Đường dẫn ảnh không hợp lệ");
         if (!Files.exists(filePath)) {
             throw new EntityNotFoundException("Tệp tin không tồn tại trên hệ thống lưu trữ");
         }
@@ -400,6 +465,60 @@ public class OperationsService {
             return Files.readAllBytes(filePath);
         } catch (IOException e) {
             throw new RuntimeException("Không thể đọc tệp tin: " + e.getMessage(), e);
+        }
+    }
+
+    private UserPrincipal principal(UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy người dùng"));
+        return new UserPrincipal(user.getId(), user.getLogin(), "", user.getRole(), user.isEnabled(), null,
+                assignmentRepository.findBuildingIdsByUserId(userId));
+    }
+
+    private void requireParent(ParentType type, UUID id, UserPrincipal caller) {
+        switch (type) {
+            case MAINTENANCE_ISSUE -> AccessPolicy.requireContract(issueRepository.findById(id)
+                    .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy sự cố")).getContract(), caller);
+            case INVOICE_FEEDBACK -> AccessPolicy.requireInvoice(feedbackRepository.findById(id)
+                    .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy phản hồi")).getInvoice(), caller);
+            case METER_READING -> {
+                var reading = readingRepository.findById(id)
+                        .orElseThrow(() -> new EntityNotFoundException("Không tìm thấy chỉ số"));
+                if (!caller.hasBuildingScope(reading.getMeter().getRoom().getBuilding().getId())
+                        && !(caller.isTenant() && invoiceRepository.canTenantReadReading(caller.getId(), id)))
+                    throw new AccessDeniedException("Không có quyền đọc ảnh chỉ số");
+            }
+        }
+    }
+
+    private byte[] normalizeImage(MultipartFile file, String encoding) {
+        try (ImageInputStream input = ImageIO.createImageInputStream(file.getInputStream())) {
+            Iterator<ImageReader> readers = ImageIO.getImageReaders(input);
+            if (!readers.hasNext()) throw new IllegalArgumentException("Ảnh không giải mã được");
+            ImageReader reader = readers.next();
+            try {
+                reader.setInput(input);
+                int width = reader.getWidth(0), height = reader.getHeight(0);
+                if (width <= 0 || height <= 0 || (long) width * height > 20_000_000)
+                    throw new IllegalArgumentException("Ảnh vượt giới hạn 20 triệu điểm ảnh");
+                BufferedImage decoded = reader.read(0);
+                ByteArrayOutputStream output = new ByteArrayOutputStream();
+                if (!ImageIO.write(decoded, encoding, output)) throw new IllegalArgumentException("Không mã hóa được ảnh");
+                if (output.size() > MAX_FILE_SIZE) throw new IllegalArgumentException("Ảnh sau xử lý vượt 5 MB");
+                return output.toByteArray();
+            } finally { reader.dispose(); }
+        } catch (IOException ex) {
+            throw new IllegalArgumentException("Dữ liệu ảnh bị hỏng", ex);
+        }
+    }
+
+    @org.springframework.scheduling.annotation.Scheduled(fixedDelayString = "${trohub.storage.cleanup-ms:3600000}")
+    public void cleanupTemporaryFiles() {
+        for (StoredFile file : storedFileRepository.findByStatusAndCreatedAtBefore("TEMPORARY", Instant.now().minusSeconds(86400))) {
+            Path target = storageDirectory.resolve(file.getStorageKey()).normalize();
+            if (!target.startsWith(storageDirectory)) throw new IllegalStateException("Đường dẫn lưu trữ không hợp lệ");
+            try { Files.deleteIfExists(target); } catch (IOException ex) { continue; }
+            storedFileRepository.delete(file);
         }
     }
 

@@ -24,7 +24,7 @@ export const mobileDepositsApi = {
     idempotencyKey?: string
   ): Promise<DepositLedgerEntryResponse> => {
     const res = await mobileApiClient.post<ApiResponse<DepositLedgerEntryResponse>>('/deposits/receipt', req, {
-      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
+      headers: idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : {},
     });
     return res.data.data;
   },
@@ -34,7 +34,7 @@ export const mobileDepositsApi = {
     idempotencyKey?: string
   ): Promise<DepositLedgerEntryResponse> => {
     const res = await mobileApiClient.post<ApiResponse<DepositLedgerEntryResponse>>('/deposits/correct', req, {
-      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
+      headers: idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : {},
     });
     return res.data.data;
   },
@@ -44,7 +44,7 @@ export const mobileDepositsApi = {
     idempotencyKey?: string
   ): Promise<DepositLedgerEntryResponse> => {
     const res = await mobileApiClient.post<ApiResponse<DepositLedgerEntryResponse>>('/deposits/refund', req, {
-      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
+      headers: idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : {},
     });
     return res.data.data;
   },
@@ -54,7 +54,7 @@ export const mobileDepositsApi = {
     idempotencyKey?: string
   ): Promise<DepositLedgerEntryResponse> => {
     const res = await mobileApiClient.post<ApiResponse<DepositLedgerEntryResponse>>('/deposits/deduct', req, {
-      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
+      headers: idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : {},
     });
     return res.data.data;
   },
@@ -64,7 +64,7 @@ export const mobileDepositsApi = {
     idempotencyKey?: string
   ): Promise<DepositLedgerEntryResponse> => {
     const res = await mobileApiClient.post<ApiResponse<DepositLedgerEntryResponse>>('/deposits/offset-invoice', req, {
-      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
+      headers: idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : {},
     });
     return res.data.data;
   },
@@ -74,7 +74,7 @@ export const mobileDepositsApi = {
     idempotencyKey?: string
   ): Promise<ContractDepositFinancialStatusResponse> => {
     const res = await mobileApiClient.post<ApiResponse<ContractDepositFinancialStatusResponse>>('/deposits/settle', req, {
-      headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {},
+      headers: idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : {},
     });
     return res.data.data;
   },

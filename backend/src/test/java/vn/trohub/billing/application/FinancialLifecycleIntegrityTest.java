@@ -71,6 +71,10 @@ class FinancialLifecycleIntegrityTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(contractRepository.findForUpdate(any())).thenAnswer(call -> contractRepository.findById(call.getArgument(0)));
+        lenient().when(operationRepository.save(any())).thenAnswer(call -> call.getArgument(0));
+        lenient().when(invoiceRepository.findForUpdate(any())).thenAnswer(call -> invoiceRepository.findById(call.getArgument(0)));
+
         ObjectMapper objectMapper = new ObjectMapper();
 
         paymentService = new PaymentService(
@@ -177,7 +181,7 @@ class FinancialLifecycleIntegrityTest {
         assertEquals(PaymentStatus.PARTIAL, pay1Res.paymentStatus());
 
         // 2. Thu đợt 2: 2.105.875đ -> Thu đủ
-        when(ledgerEntryRepository.sumAmountByInvoiceId(invoice1.getId())).thenReturn(new BigDecimal("3105875"));
+        when(ledgerEntryRepository.sumAmountByInvoiceId(invoice1.getId())).thenReturn(new BigDecimal("1000000"), new BigDecimal("3105875"));
         RecordPaymentRequest pay2Req = new RecordPaymentRequest(
                 invoice1.getId(),
                 new BigDecimal("2105875"),

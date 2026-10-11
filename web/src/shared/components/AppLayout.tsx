@@ -22,22 +22,20 @@ import {
   Badge,
   Popover,
 } from '@mui/material';
-import {
-  Menu as MenuIcon,
-  Dashboard as DashboardIcon,
-  Apartment as ApartmentIcon,
-  People as PeopleIcon,
-  ReceiptLong as ReceiptIcon,
-  Speed as MeterIcon,
-  ReportProblem as TicketIcon,
-  ManageAccounts as UsersIcon,
-  VpnKey as KeyIcon,
-  Logout as LogoutIcon,
-  Speed as StatusIcon,
-  AccountCircle as AccountIcon,
-  Notifications as NotificationsIcon,
-  DoneAll as DoneAllIcon,
-} from '@mui/icons-material';
+import MenuIcon from '@mui/icons-material/Menu';
+import DashboardIcon from '@mui/icons-material/Dashboard';
+import ApartmentIcon from '@mui/icons-material/Apartment';
+import PeopleIcon from '@mui/icons-material/People';
+import ReceiptIcon from '@mui/icons-material/ReceiptLong';
+import MeterIcon from '@mui/icons-material/Speed';
+import TicketIcon from '@mui/icons-material/ReportProblem';
+import UsersIcon from '@mui/icons-material/ManageAccounts';
+import KeyIcon from '@mui/icons-material/VpnKey';
+import LogoutIcon from '@mui/icons-material/Logout';
+import StatusIcon from '@mui/icons-material/Speed';
+import AccountIcon from '@mui/icons-material/AccountCircle';
+import NotificationsIcon from '@mui/icons-material/Notifications';
+import DoneAllIcon from '@mui/icons-material/DoneAll';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { notificationsApi } from '../../features/notifications/notificationsApi';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
@@ -123,7 +121,7 @@ export const AppLayout: React.FC = () => {
   // Danh mục menu theo quyền
   const menuItems = [
     ...(user?.role !== 'TENANT'
-      ? [{ text: 'Bảng điều khiển', icon: <DashboardIcon />, path: '/dashboard' }]
+      ? [{ text: 'Bảng điều khiển', icon: <DashboardIcon />, path: '/dashboard' }, { text: 'Nhật ký giao dịch', icon: <ReceiptIcon />, path: '/audit' }]
       : [{ text: 'Phòng của tôi', icon: <DashboardIcon />, path: '/tenant' }]),
     ...(user?.role !== 'TENANT'
       ? [

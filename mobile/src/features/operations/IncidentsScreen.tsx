@@ -22,6 +22,8 @@ import { useMobileAuth } from '@/features/auth/AuthContext';
 import { mobileOperationsApi } from './operationsApi';
 import { IssueDto, IssueStatus } from './types';
 import { mobileApiClient } from '../auth/mobileClient';
+import * as ImagePicker from 'expo-image-picker';
+import { PrivateImage } from '../../shared/PrivateImage';
 
 interface IncidentsScreenProps {
   onBack?: () => void;
@@ -45,6 +47,17 @@ export const IncidentsScreen: React.FC<IncidentsScreenProps> = ({ onBack }) => {
   const [formDesc, setFormDesc] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [photos,setPhotos]=useState<Array<ImagePicker.ImagePickerAsset & {fileId?:string}>>([]);
+  const pickPhoto=async(camera:boolean)=>{
+    if(photos.length>=5){setErrorMsg('Tối đa 5 ảnh.');return;}
+    try {
+      if(camera && !(await ImagePicker.requestCameraPermissionsAsync()).granted){setErrorMsg('Cần quyền camera để chụp ảnh.');return;}
+      const result=camera?await ImagePicker.launchCameraAsync({mediaTypes:['images'],quality:0.8}):await ImagePicker.launchImageLibraryAsync({mediaTypes:['images'],allowsMultipleSelection:true,selectionLimit:5-photos.length,quality:0.8});
+      if(result.canceled)return;
+      if(photos.length+result.assets.length>5 || result.assets.some(asset=>(asset.fileSize??0)>5*1024*1024)){setErrorMsg('Tối đa 5 ảnh, mỗi ảnh không quá 5 MB.');return;}
+      setPhotos(old=>[...old,...result.assets]);
+    }catch{setErrorMsg('Không chọn được ảnh. Vui lòng thử lại.');}
+  };
 
   // Dialog: Chi tiết sự cố & Chuyển trạng thái
   const [detailDialogVisible, setDetailDialogVisible] = useState(false);
@@ -95,15 +108,27 @@ export const IncidentsScreen: React.FC<IncidentsScreenProps> = ({ onBack }) => {
     setSubmitting(true);
     setErrorMsg(null);
     try {
+      const uploaded=[...photos];
+      for(let i=0;i<uploaded.length;i++) {
+        const photo=uploaded[i];
+        if(photo.fileId)continue;
+        const form=new FormData();
+        form.append('file',{uri:photo.uri,name:photo.fileName??`incident-${i}.jpg`,type:photo.mimeType??'image/jpeg'} as any);
+        form.append('parentType','MAINTENANCE_ISSUE');
+        const result=await mobileApiClient.post('/files/upload',form,{headers:{'Content-Type':'multipart/form-data'}});
+        uploaded[i]={...photo,fileId:result.data.data.id};setPhotos([...uploaded]);
+      }
       await mobileOperationsApi.createIssue({
         contractId: formContractId,
         roomId: formRoomId,
         title: formTitle.trim(),
         description: formDesc.trim(),
+        fileIds:uploaded.map(photo=>photo.fileId!),
       });
       setCreateDialogVisible(false);
       setFormTitle('');
       setFormDesc('');
+      setPhotos([]);
       loadData();
     } catch (err: any) {
       setErrorMsg(err?.response?.data?.message || 'Gửi báo cáo sự cố thất bại.');
@@ -260,9 +285,10 @@ export const IncidentsScreen: React.FC<IncidentsScreenProps> = ({ onBack }) => {
                 style={{ marginBottom: 12 }}
                 placeholder="Mô tả cụ thể vị trí hư hại, thời điểm phát hiện..."
               />
-              <Text variant="bodySmall" style={{ color: theme.colors.outline }}>
-                Theo BR-125: Người thuê chỉ có thể gửi sự cố khi đang có hợp đồng cư trú ACTIVE.
-              </Text>
+              <Text variant="bodySmall">Tối đa 5 ảnh, mỗi ảnh 5 MB. Có thể gửi sự cố không kèm ảnh.</Text>
+              <Button disabled={submitting} icon="camera" onPress={()=>pickPhoto(true)}>Chụp ảnh</Button>
+              <Button disabled={submitting} icon="image" onPress={()=>pickPhoto(false)}>Chọn ảnh</Button>
+              {photos.map((photo,index)=><Button key={photo.uri} disabled={submitting} onPress={()=>setPhotos(old=>old.filter((_,i)=>i!==index))}>Bỏ ảnh {index+1}: {photo.fileName??'Ảnh đã chọn'}</Button>)}
             </ScrollView>
           </Dialog.Content>
           <Dialog.Actions>
@@ -299,6 +325,7 @@ export const IncidentsScreen: React.FC<IncidentsScreenProps> = ({ onBack }) => {
                 <Text variant="bodyMedium" style={{ marginTop: 4, marginBottom: 12 }}>
                   {selectedIssue.description}
                 </Text>
+                {selectedIssue.fileIds?.map(id=><PrivateImage key={id} fileId={id}/>)}
 
                 <Divider style={{ marginVertical: 8 }} />
 

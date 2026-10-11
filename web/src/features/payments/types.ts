@@ -3,6 +3,8 @@ export type LedgerEntryType =
   | 'PAYMENT_CORRECTION'
   | 'REFUND'
   | 'CREDIT_APPLIED'
+  | 'CREDIT_OUT'
+  | 'CREDIT_IN'
   | 'DEPOSIT_OFFSET';
 
 export type PaymentMethod =
@@ -16,6 +18,8 @@ export type PaymentStatus = 'UNPAID' | 'PARTIAL' | 'PAID' | 'CREDIT';
 
 export interface RecordPaymentRequest {
   invoiceId: string;
+  overpaymentConfirmed?: boolean;
+  effectiveDate?: string;
   amount: number | string;
   paymentMethod: PaymentMethod;
   referenceCode?: string;

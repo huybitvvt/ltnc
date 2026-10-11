@@ -26,9 +26,11 @@ public class InvoiceAdjustment {
     @Column(name = "reason", nullable = false, columnDefinition = "TEXT")
     private String reason;
 
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(name = "old_snapshot", nullable = false, columnDefinition = "JSONB")
     private String oldSnapshot;
 
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(name = "new_snapshot", nullable = false, columnDefinition = "JSONB")
     private String newSnapshot;
 

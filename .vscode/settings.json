@@ -1,0 +1,12 @@
+{
+  "java.autobuild.enabled": false,
+  "java.import.gradle.enabled": false,
+  "java.import.exclusions": ["**/node_modules/**", "**/mobile/android/**", "**/.tools/**"],
+  "files.watcherExclude": {
+    "**/.tools/**": true,
+    "**/node_modules/**": true,
+    "**/infra/*pgdata/**": true,
+    "**/mobile/android/**": true
+  },
+  "search.exclude": { "**/.tools/**": true, "**/mobile/android/**": true }
+}

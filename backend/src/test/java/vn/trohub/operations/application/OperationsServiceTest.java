@@ -55,6 +55,9 @@ class OperationsServiceTest {
     @Mock
     private UserRepository userRepository;
 
+    @Mock private vn.trohub.user.infrastructure.BuildingStaffAssignmentRepository assignments;
+    @Mock private vn.trohub.tenancy.infrastructure.MeterReadingRepository readings;
+
     @TempDir
     Path tempStorageDir;
 
@@ -78,7 +81,7 @@ class OperationsServiceTest {
                 contractRepository,
                 roomRepository,
                 invoiceRepository,
-                userRepository,
+                userRepository, assignments, readings,
                 tempStorageDir.toString()
         );
 
@@ -97,6 +100,8 @@ class OperationsServiceTest {
 
         TenantProfile profile = new TenantProfile("Nguyen Van A", "0901234567", "012345678901", null);
         profile.setId(UUID.randomUUID());
+        profile.setUser(tenantUser);
+        lenient().when(assignments.findBuildingIdsByUserId(staffUser.getId())).thenReturn(List.of(building.getId()));
 
         activeContract = new Contract(
                 room,
@@ -124,6 +129,7 @@ class OperationsServiceTest {
         invoice.setId(UUID.randomUUID());
         invoice.setContract(activeContract);
         invoice.setBillingMonth("2026-09");
+        invoice.setStatus(vn.trohub.billing.domain.InvoiceStatus.ISSUED);
     }
 
     @Test
@@ -313,9 +319,7 @@ class OperationsServiceTest {
     @DisplayName("Lưu tệp ảnh: Kiểm tra kích thước <= 5MB và định dạng magic numbers hợp lệ (BR-131)")
     void storeFile_validation_success() {
         // PNG Header thật: 89 50 4E 47 0D 0A 1A 0A
-        byte[] validPngContent = new byte[]{
-                (byte) 0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00, 0x00, 0x0D
-        };
+        byte[] validPngContent = java.util.Base64.getDecoder().decode("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+aK1cAAAAASUVORK5CYII=");
         MockMultipartFile validPng = new MockMultipartFile(
                 "file", "test.png", "image/png", validPngContent
         );
@@ -330,7 +334,7 @@ class OperationsServiceTest {
         OperationsDtos.StoredFileDto fileDto = operationsService.storeFile(
                 validPng,
                 ParentType.MAINTENANCE_ISSUE,
-                UUID.randomUUID(),
+                null,
                 tenantUser.getId()
         );
 
@@ -350,7 +354,7 @@ class OperationsServiceTest {
         assertThrows(IllegalArgumentException.class, () -> operationsService.storeFile(
                 fakeJpg,
                 ParentType.MAINTENANCE_ISSUE,
-                UUID.randomUUID(),
+                null,
                 tenantUser.getId()
         ));
     }

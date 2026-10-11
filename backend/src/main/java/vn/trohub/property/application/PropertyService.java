@@ -131,6 +131,7 @@ public class PropertyService {
 
     @Transactional
     public FloorResponse createFloor(UUID buildingId, FloorRequest request, UserPrincipal principal) {
+        if (!principal.isOwner()) throw new AccessDeniedException("Chỉ OWNER tạo tầng");
         checkBuildingAccess(buildingId, principal);
         Building building = getBuildingById(buildingId, principal);
 
@@ -188,6 +189,8 @@ public class PropertyService {
         if (request.floorId() != null) {
             floor = floorRepository.findById(request.floorId())
                     .orElseThrow(() -> new IllegalArgumentException("Tầng không tồn tại: " + request.floorId()));
+            if (!floor.getBuilding().getId().equals(buildingId))
+                throw new IllegalArgumentException("Tầng không thuộc tòa nhà của phòng");
         }
 
         Room room = new Room(building, floor, roomNumber, request.basePrice(), request.depositAmount());
@@ -223,8 +226,10 @@ public class PropertyService {
         if (request.floorId() != null) {
             Floor floor = floorRepository.findById(request.floorId())
                     .orElseThrow(() -> new IllegalArgumentException("Tầng không tồn tại: " + request.floorId()));
+            if (!floor.getBuilding().getId().equals(room.getBuilding().getId()))
+                throw new IllegalArgumentException("Tầng không thuộc tòa nhà của phòng");
             room.setFloor(floor);
-        }
+        } else room.setFloor(null);
 
         room.setBasePrice(request.basePrice());
         room.setDepositAmount(request.depositAmount());

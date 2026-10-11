@@ -36,13 +36,13 @@ export const invoicesApi = {
   },
 
   issueInvoice: async (id: string, idempotencyKey?: string) => {
-    const headers = idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {};
+    const headers = idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : {};
     const res = await apiClient.post<{ data: InvoiceDetail }>(`/invoices/${id}/issue`, {}, { headers });
     return res.data.data;
   },
 
   adjustInvoice: async (id: string, data: AdjustInvoiceRequest, idempotencyKey?: string) => {
-    const headers = idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {};
+    const headers = idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : {};
     const res = await apiClient.post<{ data: InvoiceDetail }>(`/invoices/${id}/adjust`, data, { headers });
     return res.data.data;
   },

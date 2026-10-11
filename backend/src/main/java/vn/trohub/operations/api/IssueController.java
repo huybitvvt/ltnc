@@ -41,7 +41,7 @@ public class IssueController {
             @PathVariable UUID id,
             @AuthenticationPrincipal UserPrincipal principal
     ) {
-        OperationsDtos.IssueDto result = operationsService.getIssue(id);
+        OperationsDtos.IssueDto result = operationsService.getIssue(id, principal);
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 
@@ -53,7 +53,7 @@ public class IssueController {
             @RequestParam(required = false) IssueStatus status,
             @AuthenticationPrincipal UserPrincipal principal
     ) {
-        List<OperationsDtos.IssueDto> result = operationsService.listIssues(contractId, roomId, status);
+        List<OperationsDtos.IssueDto> result = operationsService.listIssues(contractId, roomId, status, principal);
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
 

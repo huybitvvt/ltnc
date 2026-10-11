@@ -34,13 +34,29 @@ public class SecurityConfig {
     }
 
     @Bean
-    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+    public SecurityFilterChain securityFilterChain(HttpSecurity http, com.fasterxml.jackson.databind.ObjectMapper mapper) throws Exception {
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
-            .csrf(AbstractHttpConfigurer::disable)
+            .csrf(csrf -> csrf
+                .csrfTokenRepository(org.springframework.security.web.csrf.CookieCsrfTokenRepository.withHttpOnlyFalse())
+                .csrfTokenRequestHandler(new org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler())
+                .requireCsrfProtectionMatcher(request ->
+                    request.getRequestURI().startsWith("/api/v1/auth/web/")
+                    && !List.of("GET", "HEAD", "OPTIONS").contains(request.getMethod())))
             .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+            .exceptionHandling(errors -> errors
+                .authenticationEntryPoint((request, response, exception) -> {
+                    response.setStatus(401); response.setContentType("application/json;charset=UTF-8");
+                    response.setHeader("WWW-Authenticate", "Bearer");
+                    mapper.writeValue(response.getOutputStream(), vn.trohub.common.api.ApiError.of("UNAUTHORIZED", "Vui lòng đăng nhập lại", java.util.UUID.randomUUID().toString()));
+                })
+                .accessDeniedHandler((request, response, exception) -> {
+                    response.setStatus(403); response.setContentType("application/json;charset=UTF-8");
+                    mapper.writeValue(response.getOutputStream(), vn.trohub.common.api.ApiError.of("FORBIDDEN", "Không có quyền thực hiện yêu cầu", java.util.UUID.randomUUID().toString()));
+                }))
             .authorizeHttpRequests(auth -> auth
                 .requestMatchers("/actuator/health").permitAll()
+                .requestMatchers("/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
                 .requestMatchers("/api/v1/auth/**").permitAll()
                 .anyRequest().authenticated()
             )

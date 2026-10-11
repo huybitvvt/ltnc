@@ -18,12 +18,15 @@ import java.util.UUID;
 
 @Component
 public class JwtTokenProvider {
+    private java.time.Clock clock = java.time.Clock.system(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setClock(java.time.Clock clock) { this.clock = clock; }
 
     private final SecretKey key;
     private final long accessTokenExpirationSeconds;
 
     public JwtTokenProvider(
-            @Value("${trohub.jwt.secret:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}") String secret,
+            @Value("${trohub.jwt.secret}") String secret,
             @Value("${trohub.jwt.access-token-expiration-seconds:900}") long accessTokenExpirationSeconds
     ) {
         this.key = Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8));
@@ -31,7 +34,7 @@ public class JwtTokenProvider {
     }
 
     public String generateAccessToken(UUID userId, String login, UserRole role, UUID sessionId) {
-        Instant now = Instant.now();
+        Instant now = clock.instant();
         Instant expiry = now.plusSeconds(accessTokenExpirationSeconds);
 
         return Jwts.builder()
@@ -48,6 +51,7 @@ public class JwtTokenProvider {
     public Claims parseClaims(String token) {
         return Jwts.parser()
                 .verifyWith(key)
+                .clock(() -> Date.from(clock.instant()))
                 .build()
                 .parseSignedClaims(token)
                 .getPayload();

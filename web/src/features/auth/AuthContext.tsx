@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { apiClient, setInMemoryToken, setOnAuthExpired } from '../../shared/api/client';
-import { ApiResponse, AuthUser, LoginResponseData } from './types';
+import { AuthUser } from './types';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -15,8 +16,14 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const USER_STORAGE_KEY = 'trohub_user_info';
+let pendingRestore: ReturnType<typeof apiClient.post<any>> | null = null;
+function restoreWebSession() {
+  if (!pendingRestore) pendingRestore = apiClient.post<any>('/auth/web/refresh').finally(() => {pendingRestore = null;});
+  return pendingRestore;
+}
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<AuthUser | null>(() => {
     try {
       const cached = localStorage.getItem(USER_STORAGE_KEY);
@@ -28,10 +35,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const clearSession = useCallback(() => {
+    queryClient.clear();
     setInMemoryToken(null);
     setUser(null);
     localStorage.removeItem(USER_STORAGE_KEY);
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
     setOnAuthExpired(() => {
@@ -44,8 +52,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let isMounted = true;
     const restoreSession = async () => {
       try {
-        const response = await apiClient.post<ApiResponse<LoginResponseData>>('/auth/refresh');
-        if (isMounted && response.data.success) {
+        const response = await restoreWebSession();
+        if (isMounted && response.data && response.data.success !== false && response.data.data) {
           const { accessToken, user: loggedInUser } = response.data.data;
           setInMemoryToken(accessToken);
           setUser(loggedInUser);
@@ -72,16 +80,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = async (loginId: string, password: string): Promise<AuthUser> => {
     setIsLoading(true);
     try {
-      const response = await apiClient.post<ApiResponse<LoginResponseData>>('/auth/login', {
+      const response = await apiClient.post<any>('/auth/web/login', {
         login: loginId,
         password,
       });
 
-      if (!response.data.success) {
-        throw new Error(response.data.message || 'Đăng nhập thất bại');
+      const resPayload = response.data;
+      if (!resPayload || resPayload.success === false) {
+        throw new Error(resPayload?.message || resPayload?.error?.message || 'Đăng nhập thất bại');
       }
 
-      const { accessToken, user: loggedInUser } = response.data.data;
+      const loginData = resPayload.data;
+      if (!loginData || !loginData.accessToken) {
+        throw new Error('Dữ liệu xác thực không hợp lệ');
+      }
+
+      const { accessToken, user: loggedInUser } = loginData;
+      queryClient.clear();
       setInMemoryToken(accessToken);
       setUser(loggedInUser);
       localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(loggedInUser));
@@ -93,7 +108,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const logout = async (): Promise<void> => {
     try {
-      await apiClient.post('/auth/logout');
+      await apiClient.post('/auth/web/logout');
     } catch {
       // Bỏ qua lỗi mạng khi logout
     } finally {
@@ -102,22 +117,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const activate = async (inviteCode: string, newPassword: string): Promise<void> => {
-    const response = await apiClient.post<ApiResponse<string>>('/auth/activate', {
+    const response = await apiClient.post<any>('/auth/activate', {
       inviteCode,
       newPassword,
     });
-    if (!response.data.success) {
-      throw new Error(response.data.message || 'Kích hoạt tài khoản không thành công');
+    const resPayload = response.data;
+    if (!resPayload || resPayload.success === false) {
+      throw new Error(resPayload?.message || resPayload?.error?.message || 'Kích hoạt tài khoản không thành công');
     }
   };
 
   const changePassword = async (oldPassword: string, newPassword: string): Promise<void> => {
-    const response = await apiClient.post<ApiResponse<string>>('/auth/change-password', {
+    const response = await apiClient.post<any>('/auth/change-password', {
       oldPassword,
       newPassword,
     });
-    if (!response.data.success) {
-      throw new Error(response.data.message || 'Đổi mật khẩu không thành công');
+    const resPayload = response.data;
+    if (!resPayload || resPayload.success === false) {
+      throw new Error(resPayload?.message || resPayload?.error?.message || 'Đổi mật khẩu không thành công');
     }
     // Đổi mật khẩu thành công sẽ thu hồi toàn bộ session, cần đăng nhập lại
     clearSession();

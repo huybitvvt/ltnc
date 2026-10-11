@@ -80,6 +80,8 @@ class SecurityScopeAuthorizationTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(invoiceRepository.findForUpdate(any())).thenAnswer(call -> invoiceRepository.findById(call.getArgument(0)));
+
         paymentService = new PaymentService(
                 invoiceRepository,
                 adjustmentRepository,
@@ -161,8 +163,6 @@ class SecurityScopeAuthorizationTest {
     @DisplayName("TENANT_A không thuộc Hợp đồng B: cố xem thông tin thanh toán Hóa đơn B -> Bị chặn với AccessDeniedException")
     void testTenantA_CannotAccessInvoice_OfContractB() {
         when(invoiceRepository.findById(invoiceB.getId())).thenReturn(Optional.of(invoiceB));
-        when(contractMemberRepository.findByContractIdOrderByJoinedOnAsc(contractB.getId()))
-                .thenReturn(Collections.emptyList());
 
         AccessDeniedException ex = assertThrows(AccessDeniedException.class, () ->
                 paymentService.getInvoiceFinancialStatus(invoiceB.getId(), tenantAPrincipal)

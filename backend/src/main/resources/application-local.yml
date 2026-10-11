@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/trohub}
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5433/trohub}
     username: ${SPRING_DATASOURCE_USERNAME:trohub}
     password: ${SPRING_DATASOURCE_PASSWORD:trohub_dev_secret}
     driver-class-name: org.postgresql.Driver
@@ -18,10 +18,13 @@ spring:
     locations: classpath:db/migration
 
 trohub:
+  auth:
+    secure-cookies: false
   jwt:
-    secret: ${JWT_SECRET:404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970}
+    secret: ${JWT_SECRET}
     access-token-expiration-seconds: 900
     refresh-token-expiration-days: 7
   owner-bootstrap:
+    enabled: ${OWNER_BOOTSTRAP_ENABLED:false}
     login: ${OWNER_BOOTSTRAP_LOGIN:owner}
-    password: ${OWNER_BOOTSTRAP_PASSWORD:TroHubOwner@2026}
+    password: ${OWNER_BOOTSTRAP_PASSWORD:}

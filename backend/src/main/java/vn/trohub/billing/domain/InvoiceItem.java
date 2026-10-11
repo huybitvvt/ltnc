@@ -34,9 +34,11 @@ public class InvoiceItem {
     @Column(name = "amount", nullable = false, precision = 19, scale = 0)
     private BigDecimal amount;
 
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(name = "calculation_snapshot", nullable = false, columnDefinition = "JSONB")
     private String calculationSnapshot;
 
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(name = "reading_refs", columnDefinition = "JSONB")
     private String readingRefs;
 

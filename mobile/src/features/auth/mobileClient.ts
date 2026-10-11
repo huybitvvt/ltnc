@@ -8,10 +8,25 @@ const DEFAULT_URL = Platform.OS === 'android' ? 'http://10.0.2.2:8080/api/v1' : 
 const baseURL = process.env.EXPO_PUBLIC_API_URL || DEFAULT_URL;
 
 const REFRESH_TOKEN_KEY = 'trohub_mobile_refresh_token';
+let browserRefreshToken: string | null = null;
 
 let inMemoryAccessToken: string | null = null;
 let isRefreshing = false;
-let refreshSubscribers: Array<(token: string) => void> = [];
+let commandCounter = 0;
+const pendingCommands = new Map<string, string>();
+const commandPattern = /\/(payments|deposits)\/|\/invoices\/[^/]+\/(issue|adjust)$|\/contracts\/[^/]+\/checkout$/;
+function commandKey(config: InternalAxiosRequestConfig): string | undefined {
+  if (config.method !== 'post' || !commandPattern.test(config.url || '')) return;
+  const fingerprint = (config.url || '') + ':' + (typeof config.data === 'string' ? config.data : JSON.stringify(config.data ?? {}));
+  let key = pendingCommands.get(fingerprint);
+  if (!key) { key = 'cmd-' + Date.now() + '-' + (++commandCounter) + '-' + Math.random().toString(36).slice(2); pendingCommands.set(fingerprint, key); }
+  return key;
+}
+function releaseCommand(config: InternalAxiosRequestConfig) {
+  const fingerprint = (config.url || '') + ':' + (typeof config.data === 'string' ? config.data : JSON.stringify(config.data ?? {}));
+  pendingCommands.delete(fingerprint);
+}
+let refreshSubscribers: Array<{ resolve: (token: string) => void; reject: (error: unknown) => void }> = [];
 let onAuthExpiredHandler: (() => void) | null = null;
 
 // Hỗ trợ lưu trữ an toàn đa nền tảng
@@ -19,7 +34,7 @@ export const storageHelper = {
   async setRefreshToken(token: string): Promise<void> {
     try {
       if (Platform.OS === 'web') {
-        localStorage.setItem(REFRESH_TOKEN_KEY, token);
+        browserRefreshToken = token;
       } else {
         await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, token);
       }
@@ -31,7 +46,7 @@ export const storageHelper = {
   async getRefreshToken(): Promise<string | null> {
     try {
       if (Platform.OS === 'web') {
-        return localStorage.getItem(REFRESH_TOKEN_KEY);
+        return browserRefreshToken;
       }
       return await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
     } catch (e) {
@@ -43,7 +58,7 @@ export const storageHelper = {
   async clearRefreshToken(): Promise<void> {
     try {
       if (Platform.OS === 'web') {
-        localStorage.removeItem(REFRESH_TOKEN_KEY);
+        browserRefreshToken = null;
       } else {
         await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
       }
@@ -55,6 +70,7 @@ export const storageHelper = {
 
 export const setMobileAccessToken = (token: string | null) => {
   inMemoryAccessToken = token;
+  if (!token) pendingCommands.clear();
 };
 
 export const getMobileAccessToken = (): string | null => {
@@ -78,29 +94,34 @@ mobileApiClient.interceptors.request.use((config: InternalAxiosRequestConfig) =>
   if (inMemoryAccessToken && !config.headers.Authorization) {
     config.headers.Authorization = `Bearer ${inMemoryAccessToken}`;
   }
+  const key = commandKey(config);
+  if (key) config.headers['X-Idempotency-Key'] = key;
   return config;
 });
 
 // Single-flight refresh token khi nhận 401
 mobileApiClient.interceptors.response.use(
-  (response) => response,
+  (response) => { releaseCommand(response.config); return response; },
   async (error: AxiosError) => {
+    if (error.config && error.response && error.response.status >= 400 && error.response.status < 500 && error.response.status !== 401)
+      releaseCommand(error.config);
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
     if (!originalRequest || error.response?.status !== 401 || originalRequest._retry) {
       return Promise.reject(error);
     }
 
-    if (originalRequest.url?.includes('/auth/login') || originalRequest.url?.includes('/auth/refresh')) {
+    if (originalRequest.url?.includes('/auth/') || originalRequest.url?.includes('/auth/mobile/refresh')) {
       return Promise.reject(error);
     }
 
     if (isRefreshing) {
-      return new Promise((resolve) => {
-        refreshSubscribers.push((token: string) => {
+      originalRequest._retry = true;
+      return new Promise((resolve, reject) => {
+        refreshSubscribers.push({ reject, resolve: (token: string) => {
           originalRequest.headers.Authorization = `Bearer ${token}`;
           resolve(mobileApiClient(originalRequest));
-        });
+        }});
       });
     }
 
@@ -114,7 +135,7 @@ mobileApiClient.interceptors.response.use(
       }
 
       const refreshResponse = await axios.post<ApiResponse<LoginResponseData>>(
-        `${baseURL}/auth/refresh`,
+        `${baseURL}/auth/mobile/refresh`,
         { refreshToken: storedRefreshToken },
         { headers: { 'Content-Type': 'application/json' } }
       );
@@ -126,12 +147,13 @@ mobileApiClient.interceptors.response.use(
         await storageHelper.setRefreshToken(newRefreshToken);
       }
 
-      refreshSubscribers.forEach((cb) => cb(accessToken));
+      refreshSubscribers.forEach((cb) => cb.resolve(accessToken));
       refreshSubscribers = [];
 
       originalRequest.headers.Authorization = `Bearer ${accessToken}`;
       return mobileApiClient(originalRequest);
     } catch (refreshErr) {
+      refreshSubscribers.forEach((subscriber) => subscriber.reject(refreshErr));
       setMobileAccessToken(null);
       await storageHelper.clearRefreshToken();
       refreshSubscribers = [];

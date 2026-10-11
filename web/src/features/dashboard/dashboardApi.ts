@@ -18,10 +18,13 @@ export interface DashboardMetrics {
 }
 
 export const dashboardApi = {
-  getMetrics: async (buildingId?: string, billingMonth?: string): Promise<DashboardMetrics> => {
+  getMetrics: async (buildingId?: string, billingMonth?: string, dates?: { cashFrom?: string; cashTo?: string; asOf?: string }): Promise<DashboardMetrics> => {
     const params: Record<string, string> = {};
     if (buildingId) params.buildingId = buildingId;
     if (billingMonth) params.billingMonth = billingMonth;
+    if (dates?.cashFrom) params.cashFrom = dates.cashFrom;
+    if (dates?.cashTo) params.cashTo = dates.cashTo;
+    if (dates?.asOf) params.asOf = dates.asOf;
 
     const response = await apiClient.get<{ data: DashboardMetrics }>('/reporting/dashboard', {
       params,

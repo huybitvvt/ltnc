@@ -1,0 +1,36 @@
+Picked up JAVA_TOOL_OPTIONS: -Xmx384m
+[INFO] Scanning for projects...
+[INFO]
+[INFO] ----------------------< vn.trohub:trohub-backend >----------------------
+[INFO] Building trohub-backend 1.0.0-SNAPSHOT
+[INFO]   from pom.xml
+[INFO] --------------------------------[ jar ]---------------------------------
+[INFO]
+[INFO] --- resources:3.3.1:resources (default-resources) @ trohub-backend ---
+[INFO] Copying 3 resources from src\main\resources to ..\.tools\backend-check\classes
+[INFO] Copying 17 resources from src\main\resources to ..\.tools\backend-check\classes
+[INFO]
+[INFO] --- compiler:3.14.1:compile (default-compile) @ trohub-backend ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO]
+[INFO] --- resources:3.3.1:testResources (default-testResources) @ trohub-backend ---
+[INFO] skip non existing resourceDirectory E:\ltnc\backend\src\test\resources
+[INFO]
+[INFO] --- compiler:3.14.1:testCompile (default-testCompile) @ trohub-backend ---
+[INFO] Nothing to compile - all classes are up to date.
+[INFO]
+[INFO] --- surefire:3.5.6:test (default-test) @ trohub-backend ---
+[INFO] Tests are skipped.
+[INFO]
+[INFO] --- jar:3.4.2:jar (default-jar) @ trohub-backend ---
+[INFO] Building jar: E:\ltnc\.tools\backend-check\trohub-backend-1.0.0-SNAPSHOT.jar
+[INFO]
+[INFO] --- spring-boot:3.5.16:repackage (repackage) @ trohub-backend ---
+[INFO] Replacing main artifact E:\ltnc\.tools\backend-check\trohub-backend-1.0.0-SNAPSHOT.jar with repackaged archive, adding nested dependencies in BOOT-INF/.
+[INFO] The original artifact has been renamed to E:\ltnc\.tools\backend-check\trohub-backend-1.0.0-SNAPSHOT.jar.original
+[INFO] ------------------------------------------------------------------------
+[INFO] BUILD SUCCESS
+[INFO] ------------------------------------------------------------------------
+[INFO] Total time:  22.113 s
+[INFO] Finished at: 2026-10-11T11:55:50+07:00
+[INFO] ------------------------------------------------------------------------

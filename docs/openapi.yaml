@@ -1,2742 +1,4560 @@
 openapi: 3.0.3
 info:
-  title: TroHub Management API
+  title: TroHub API
+  description: Integer VND amounts are decimal strings. Dates use Asia/Ho_Chi_Minh.
+    Financial commands require X-Idempotency-Key.
   version: 1.0.0
-  description: |
-    API đặc tả chính thức của hệ thống Quản lý nhà trọ TroHub.
-    Phục vụ đồng nhất cho cả React Web và React Native Mobile cho cả 3 vai trò OWNER, STAFF, TENANT.
-    Tất cả trường tiền tệ dạng chuỗi (numeric string, ví dụ: "3000000").
-    Tất cả các thao tác phát hành hóa đơn và tài chính yêu cầu header Idempotency-Key (UUID).
 servers:
-  - url: http://localhost:8080/api/v1
-    description: Local development server
-
+- url: http://127.0.0.1:8080
+  description: Generated server url
+security:
+- bearerAuth: []
 paths:
-  # ----------------------------------------------------
-  # AUTHENTICATION & SESSIONS
-  # ----------------------------------------------------
-  /auth/login:
-    post:
-      summary: Đăng nhập hệ thống
-      operationId: login
-      tags: [Auth]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/LoginRequest'
-      responses:
-        '200':
-          description: Đăng nhập thành công
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuthResponse'
-        '401':
-          $ref: '#/components/responses/ErrorResponse'
-
-  /auth/activate:
-    post:
-      summary: Kích hoạt tài khoản người thuê qua mã mời
-      operationId: activateAccount
-      tags: [Auth]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ActivateInviteRequest'
-      responses:
-        '200':
-          description: Kích hoạt thành công
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuthResponse'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-
-  /auth/csrf:
-    get:
-      summary: Lấy CSRF token cho Web client
-      operationId: getCsrfToken
-      tags: [Auth]
-      responses:
-        '200':
-          description: CSRF token
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  token: { type: string }
-                  headerName: { type: string, example: "X-XSRF-TOKEN" }
-
-  /auth/web/refresh:
-    post:
-      summary: Xoay vòng refresh token cho Web client (HttpOnly cookie)
-      operationId: refreshWebSession
-      tags: [Auth]
-      responses:
-        '200':
-          description: Cấp mới access token
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuthResponse'
-        '401':
-          $ref: '#/components/responses/ErrorResponse'
-
-  /auth/web/logout:
-    post:
-      summary: Đăng xuất thu hồi phiên Web
-      operationId: logoutWeb
-      tags: [Auth]
-      responses:
-        '200':
-          description: Thu hồi thành công
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessMessageResponse'
-
-  /auth/mobile/refresh:
-    post:
-      summary: Xoay vòng refresh token cho Mobile client
-      operationId: refreshMobileSession
-      tags: [Auth]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [refreshToken]
-              properties:
-                refreshToken: { type: string }
-      responses:
-        '200':
-          description: Cấp mới token pair
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AuthResponse'
-        '401':
-          $ref: '#/components/responses/ErrorResponse'
-
-  /auth/mobile/logout:
-    post:
-      summary: Đăng xuất thu hồi phiên Mobile
-      operationId: logoutMobile
-      tags: [Auth]
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [refreshToken]
-              properties:
-                refreshToken: { type: string }
-      responses:
-        '200':
-          description: Thu hồi thành công
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessMessageResponse'
-
-  /auth/me:
-    get:
-      summary: Thông tin tài khoản hiện tại
-      operationId: getCurrentUser
-      tags: [Auth]
-      security:
-        - BearerAuth: []
-      responses:
-        '200':
-          description: Thông tin người dùng
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UserProfileResponse'
-        '401':
-          $ref: '#/components/responses/ErrorResponse'
-
-  # ----------------------------------------------------
-  # USERS & STAFF ASSIGNMENTS (OWNER)
-  # ----------------------------------------------------
-  /users:
-    get:
-      summary: Danh sách người dùng (OWNER)
-      operationId: listUsers
-      tags: [Users]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: role
-          in: query
-          schema: { type: string, enum: [OWNER, STAFF, TENANT] }
-        - $ref: '#/components/parameters/PageParam'
-        - $ref: '#/components/parameters/SizeParam'
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UserPageResponse'
-    post:
-      summary: Tạo tài khoản nhân viên (OWNER)
-      operationId: createStaffUser
-      tags: [Users]
-      security:
-        - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateStaffRequest'
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UserDetailResponse'
-
-  /users/{id}/status:
+  /api/v1/users/{id}/status:
     put:
-      summary: Bật/khóa tài khoản người dùng
+      tags:
+      - user-controller
       operationId: updateUserStatus
-      tags: [Users]
-      security:
-        - BearerAuth: []
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
+      - name: id
+        in: path
         required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
         content:
           application/json:
             schema:
-              type: object
-              required: [enabled]
-              properties:
-                enabled: { type: boolean }
+              $ref: "#/components/schemas/UpdateUserStatusRequest"
+        required: true
       responses:
-        '200':
+        "200":
+          description: OK
           content:
-            application/json:
+            '*/*':
               schema:
-                $ref: '#/components/schemas/UserDetailResponse'
-
-  /users/{id}/assignments:
+                $ref: "#/components/schemas/ApiResponseUserSummaryDto"
+  /api/v1/users/{id}/assignments:
     get:
-      summary: Danh sách tòa nhà được giao của nhân viên
+      tags:
+      - user-controller
       operationId: getUserAssignments
-      tags: [Users]
-      security:
-        - BearerAuth: []
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
       responses:
-        '200':
+        "200":
+          description: OK
           content:
-            application/json:
+            '*/*':
               schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items: { type: string, format: uuid }
+                $ref: "#/components/schemas/ApiResponseListUUID"
     put:
-      summary: Cập nhật phân công tòa nhà cho nhân viên (OWNER)
+      tags:
+      - user-controller
       operationId: updateUserAssignments
-      tags: [Users]
-      security:
-        - BearerAuth: []
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
+      - name: id
+        in: path
         required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
         content:
           application/json:
             schema:
-              type: object
-              required: [buildingIds]
-              properties:
-                buildingIds:
-                  type: array
-                  items: { type: string, format: uuid }
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessMessageResponse'
-
-  # ----------------------------------------------------
-  # PROPERTIES: BUILDINGS, FLOORS, ROOMS
-  # ----------------------------------------------------
-  /buildings:
-    get:
-      summary: Danh sách tòa nhà trong phạm vi quyền
-      operationId: listBuildings
-      tags: [Properties]
-      security:
-        - BearerAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BuildingListResponse'
-    post:
-      summary: Tạo mới tòa nhà (OWNER)
-      operationId: createBuilding
-      tags: [Properties]
-      security:
-        - BearerAuth: []
-      requestBody:
+              $ref: "#/components/schemas/UpdateAssignmentsRequest"
         required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateBuildingRequest'
       responses:
-        '201':
+        "200":
+          description: OK
           content:
-            application/json:
+            '*/*':
               schema:
-                $ref: '#/components/schemas/BuildingDetailResponse'
-
-  /buildings/{id}:
+                $ref: "#/components/schemas/ApiResponseMapStringString"
+  /api/v1/rooms/{id}:
     get:
-      summary: Chi tiết tòa nhà
-      operationId: getBuilding
-      tags: [Properties]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BuildingDetailResponse'
-    put:
-      summary: Cập nhật tòa nhà
-      operationId: updateBuilding
-      tags: [Properties]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UpdateBuildingRequest'
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/BuildingDetailResponse'
-
-  /buildings/{id}/floors:
-    get:
-      summary: Danh sách tầng của tòa nhà
-      operationId: listBuildingFloors
-      tags: [Properties]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FloorListResponse'
-    post:
-      summary: Tạo tầng mới trong tòa nhà (OWNER)
-      operationId: createFloor
-      tags: [Properties]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateFloorRequest'
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FloorDetailResponse'
-
-  /rooms:
-    get:
-      summary: Danh sách phòng trọ có bộ lọc và phân trang
-      operationId: listRooms
-      tags: [Properties]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: buildingId
-          in: query
-          schema: { type: string, format: uuid }
-        - name: floorId
-          in: query
-          schema: { type: string, format: uuid }
-        - name: bookable
-          in: query
-          schema: { type: boolean }
-        - $ref: '#/components/parameters/PageParam'
-        - $ref: '#/components/parameters/SizeParam'
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RoomPageResponse'
-    post:
-      summary: Tạo mới phòng trọ
-      operationId: createRoom
-      tags: [Properties]
-      security:
-        - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateRoomRequest'
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RoomDetailResponse'
-
-  /rooms/{id}:
-    get:
-      summary: Chi tiết phòng trọ
+      tags:
+      - property-controller
       operationId: getRoom
-      tags: [Properties]
-      security:
-        - BearerAuth: []
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
       responses:
-        '200':
+        "200":
+          description: OK
           content:
-            application/json:
+            '*/*':
               schema:
-                $ref: '#/components/schemas/RoomDetailResponse'
+                $ref: "#/components/schemas/ApiResponseRoomResponse"
     put:
-      summary: Cập nhật phòng trọ
+      tags:
+      - property-controller
       operationId: updateRoom
-      tags: [Properties]
-      security:
-        - BearerAuth: []
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
+      - name: id
+        in: path
         required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateRoomRequest'
+              $ref: "#/components/schemas/RoomRequest"
+        required: true
       responses:
-        '200':
+        "200":
+          description: OK
           content:
-            application/json:
+            '*/*':
               schema:
-                $ref: '#/components/schemas/RoomDetailResponse'
-
-  /rooms/{id}/rentability:
+                $ref: "#/components/schemas/ApiResponseRoomResponse"
+  /api/v1/notifications/{id}/read:
     put:
-      summary: Cập nhật trạng thái sẵn sàng cho thuê (bookable)
-      operationId: updateRoomRentability
-      tags: [Properties]
-      security:
-        - BearerAuth: []
+      tags:
+      - notification-controller
+      operationId: markAsRead
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
+      - name: id
+        in: path
         required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [bookable]
-              properties:
-                bookable: { type: boolean }
+        schema:
+          type: string
+          format: uuid
       responses:
-        '200':
+        "200":
+          description: OK
           content:
-            application/json:
+            '*/*':
               schema:
-                $ref: '#/components/schemas/RoomDetailResponse'
-
-  # ----------------------------------------------------
-  # RESIDENTS & CONTRACTS
-  # ----------------------------------------------------
-  /tenants:
-    get:
-      summary: Danh sách hồ sơ người thuê
-      operationId: listTenants
-      tags: [Tenancy]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: query
-          in: query
-          schema: { type: string }
-        - $ref: '#/components/parameters/PageParam'
-        - $ref: '#/components/parameters/SizeParam'
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TenantPageResponse'
-    post:
-      summary: Tạo hồ sơ người thuê mới
-      operationId: createTenant
-      tags: [Tenancy]
-      security:
-        - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateTenantRequest'
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TenantDetailResponse'
-
-  /tenants/{id}/invite:
-    post:
-      summary: Tạo mã mời kích hoạt tài khoản cho người đại diện
-      operationId: issueTenantInvite
-      tags: [Tenancy]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: object
-                    properties:
-                      inviteCode: { type: string, example: "INV-982314" }
-                      expiresAt: { type: string, format: date-time }
-
-  /contracts:
-    get:
-      summary: Danh sách hợp đồng thuê
-      operationId: listContracts
-      tags: [Contracts]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: buildingId
-          in: query
-          schema: { type: string, format: uuid }
-        - name: roomId
-          in: query
-          schema: { type: string, format: uuid }
-        - name: status
-          in: query
-          schema: { type: string, enum: [DRAFT, ACTIVE, ENDED] }
-        - $ref: '#/components/parameters/PageParam'
-        - $ref: '#/components/parameters/SizeParam'
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ContractPageResponse'
-    post:
-      summary: Tạo hợp đồng mới (trạng thái DRAFT)
-      operationId: createContractDraft
-      tags: [Contracts]
-      security:
-        - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateContractRequest'
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ContractDetailResponse'
-
-  /contracts/{id}:
-    get:
-      summary: Chi tiết hợp đồng
-      operationId: getContract
-      tags: [Contracts]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ContractDetailResponse'
-
-  /contracts/{id}/activate:
-    post:
-      summary: Kích hoạt hợp đồng và nhận phòng (chuyển sang ACTIVE kèm chỉ số bàn giao)
-      operationId: activateContract
-      tags: [Contracts]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ActivateContractRequest'
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ContractDetailResponse'
-        '409':
-          $ref: '#/components/responses/ErrorResponse'
-
-  /contracts/{id}/extend:
-    post:
-      summary: Gia hạn thời hạn dự kiến kết thúc của hợp đồng
-      operationId: extendContract
-      tags: [Contracts]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [newPlannedEndExclusive, reason]
-              properties:
-                newPlannedEndExclusive: { type: string, format: date }
-                reason: { type: string }
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ContractDetailResponse'
-
-  /contracts/{id}/checkout:
-    post:
-      summary: Trả phòng thực tế và giải phóng phòng (chuyển sang ENDED)
-      operationId: checkoutContract
-      tags: [Contracts]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CheckoutContractRequest'
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ContractDetailResponse'
-
-  /contracts/{id}/members:
-    get:
-      summary: Danh sách thành viên cùng phòng
-      operationId: listContractMembers
-      tags: [Contracts]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ContractMemberListResponse'
-    post:
-      summary: Thêm thành viên vào hợp đồng
-      operationId: addContractMember
-      tags: [Contracts]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AddMemberRequest'
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ContractMemberResponse'
-
-  # ----------------------------------------------------
-  # TARIFFS, METERS & READINGS
-  # ----------------------------------------------------
-  /services:
-    get:
-      summary: Danh mục các loại phí và dịch vụ
-      operationId: listServices
-      tags: [Metering & Pricing]
-      security:
-        - BearerAuth: []
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ServiceListResponse'
-    post:
-      summary: Tạo mới loại dịch vụ
-      operationId: createService
-      tags: [Metering & Pricing]
-      security:
-        - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateServiceRequest'
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ServiceDetailResponse'
-
-  /buildings/{id}/tariffs:
-    get:
-      summary: Bảng đơn giá theo tòa nhà
-      operationId: getBuildingTariffs
-      tags: [Metering & Pricing]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TariffListResponse'
-    post:
-      summary: Thiết lập đơn giá mới có tháng hiệu lực
-      operationId: setTariff
-      tags: [Metering & Pricing]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateTariffRequest'
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/TariffDetailResponse'
-
-  /rooms/{id}/meters:
-    get:
-      summary: Danh sách đồng hồ đo của phòng
-      operationId: getRoomMeters
-      tags: [Metering & Pricing]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/RoomMeterListResponse'
-
-  /meters/{id}/readings:
-    get:
-      summary: Lịch sử ghi chỉ số của đồng hồ
-      operationId: getMeterReadings
-      tags: [Metering & Pricing]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MeterReadingListResponse'
-    post:
-      summary: Ghi chỉ số mới (bàn giao / cuối kỳ / trả phòng)
-      operationId: recordMeterReading
-      tags: [Metering & Pricing]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RecordMeterReadingRequest'
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/MeterReadingResponse'
-
-  /contracts/{id}/consumption-alerts:
-    get:
-      summary: Danh sách cảnh báo tiêu thụ bất thường của hợp đồng
-      operationId: getContractConsumptionAlerts
-      tags: [Metering & Pricing]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-        - name: month
-          in: query
-          schema: { type: string, example: "2026-09" }
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AlertListResponse'
-
-  /consumption-alerts/{id}/acknowledge:
-    post:
-      summary: Quản lý xác nhận số liệu chỉ số đúng kèm lý do
-      operationId: acknowledgeConsumptionAlert
-      tags: [Metering & Pricing]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [reason]
-              properties:
-                reason: { type: string }
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AlertDetailResponse'
-
-  # ----------------------------------------------------
-  # INVOICES & BILLING
-  # ----------------------------------------------------
-  /invoices:
-    get:
-      summary: Danh sách hóa đơn
-      operationId: listInvoices
-      tags: [Invoices]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: contractId
-          in: query
-          schema: { type: string, format: uuid }
-        - name: buildingId
-          in: query
-          schema: { type: string, format: uuid }
-        - name: billingMonth
-          in: query
-          schema: { type: string, example: "2026-09" }
-        - name: status
-          in: query
-          schema: { type: string, enum: [DRAFT, ISSUED] }
-        - $ref: '#/components/parameters/PageParam'
-        - $ref: '#/components/parameters/SizeParam'
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InvoicePageResponse'
-
-  /invoices/preview:
-    post:
-      summary: Tính toán xem trước hóa đơn nháp (không ghi dữ liệu)
-      operationId: previewInvoice
-      tags: [Invoices]
-      security:
-        - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/InvoicePreviewRequest'
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InvoiceDetailResponse'
-
-  /invoices/draft:
-    post:
-      summary: Tạo hoặc cập nhật lại hóa đơn nháp (DRAFT)
-      operationId: createOrRecalculateDraftInvoice
-      tags: [Invoices]
-      security:
-        - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/InvoicePreviewRequest'
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InvoiceDetailResponse'
-
-  /invoices/{id}:
-    get:
-      summary: Chi tiết hóa đơn, giải trình các dòng và tổng nợ/dư hiệu lực
-      operationId: getInvoice
-      tags: [Invoices]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InvoiceDetailResponse'
-
-  /invoices/{id}/issue:
-    post:
-      summary: Phát hành chính thức hóa đơn (chuyển sang ISSUED, snapshot bất biến)
-      operationId: issueInvoice
-      tags: [Invoices]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-        - $ref: '#/components/parameters/IdempotencyKeyHeader'
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InvoiceDetailResponse'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-        '409':
-          $ref: '#/components/responses/ErrorResponse'
-
-  /invoices/{id}/adjust:
-    post:
-      summary: Điều chỉnh tăng/giảm giá trị hóa đơn đã phát hành
-      operationId: adjustInvoice
-      tags: [Invoices]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-        - $ref: '#/components/parameters/IdempotencyKeyHeader'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AdjustInvoiceRequest'
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InvoiceDetailResponse'
-        '400':
-          $ref: '#/components/responses/ErrorResponse'
-
-  /invoices/{id}/notes:
-    post:
-      summary: Thêm ghi chú đính chính mô tả hóa đơn (phi tài chính)
-      operationId: addInvoiceNote
-      tags: [Invoices]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [content, reason]
-              properties:
-                content: { type: string }
-                reason: { type: string }
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessMessageResponse'
-
-  # ----------------------------------------------------
-  # PAYMENTS & INVOICE LEDGER
-  # ----------------------------------------------------
-  /invoices/{id}/ledger:
-    get:
-      summary: Sổ cái thanh toán và lịch sử giao dịch của hóa đơn
-      operationId: getInvoiceLedger
-      tags: [Finance & Payments]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InvoiceLedgerResponse'
-
-  /invoices/{id}/payments:
-    post:
-      summary: Ghi nhận thu tiền cho hóa đơn
-      operationId: recordInvoicePayment
-      tags: [Finance & Payments]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-        - $ref: '#/components/parameters/IdempotencyKeyHeader'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RecordPaymentRequest'
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InvoiceLedgerEntryResponse'
-
-  /invoices/{id}/payments/{entryId}/correct:
-    post:
-      summary: Sửa khoản thu nhập nhầm (tạo PAYMENT_CORRECTION tham chiếu)
-      operationId: correctPayment
-      tags: [Finance & Payments]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-        - name: entryId
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-        - $ref: '#/components/parameters/IdempotencyKeyHeader'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CorrectPaymentRequest'
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InvoiceLedgerEntryResponse'
-
-  /invoices/{id}/refund:
-    post:
-      summary: Hoàn tiền thực tế từ khoản dư của hóa đơn
-      operationId: refundInvoiceCredit
-      tags: [Finance & Payments]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-        - $ref: '#/components/parameters/IdempotencyKeyHeader'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RefundCreditRequest'
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/InvoiceLedgerEntryResponse'
-
-  /contracts/{id}/credit-transfer:
-    post:
-      summary: Chuyển khoản tiền dư giữa hai hóa đơn của cùng hợp đồng
-      operationId: transferInvoiceCredit
-      tags: [Finance & Payments]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-        - $ref: '#/components/parameters/IdempotencyKeyHeader'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreditTransferRequest'
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessMessageResponse'
-
-  # ----------------------------------------------------
-  # DEPOSITS & SETTLEMENT
-  # ----------------------------------------------------
-  /contracts/{id}/deposit:
-    get:
-      summary: Chi tiết sổ cọc, tiền cọc đang giữ và lịch sử bút toán cọc
-      operationId: getContractDeposit
-      tags: [Deposits]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ContractDepositSummaryResponse'
-
-  /contracts/{id}/deposit/receipt:
-    post:
-      summary: Thu tiền cọc (bút toán RECEIPT)
-      operationId: receiveDeposit
-      tags: [Deposits]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-        - $ref: '#/components/parameters/IdempotencyKeyHeader'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/ReceiveDepositRequest'
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DepositLedgerEntryResponse'
-
-  /contracts/{id}/deposit/refund:
-    post:
-      summary: Hoàn trả tiền cọc cho khách thuê
-      operationId: refundDeposit
-      tags: [Deposits]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-        - $ref: '#/components/parameters/IdempotencyKeyHeader'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RefundDepositRequest'
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DepositLedgerEntryResponse'
-
-  /contracts/{id}/deposit/deduct:
-    post:
-      summary: Khấu trừ tiền cọc do thiệt hại / hư hỏng thiết bị
-      operationId: deductDeposit
-      tags: [Deposits]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-        - $ref: '#/components/parameters/IdempotencyKeyHeader'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/DeductDepositRequest'
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DepositLedgerEntryResponse'
-
-  /contracts/{id}/deposit/offset:
-    post:
-      summary: Bù trừ tiền cọc đang giữ để thanh toán công nợ hóa đơn
-      operationId: offsetDepositToInvoice
-      tags: [Deposits]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-        - $ref: '#/components/parameters/IdempotencyKeyHeader'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/OffsetDepositRequest'
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessMessageResponse'
-
-  /contracts/{id}/deposit/settle:
-    post:
-      summary: Xác nhận hoàn tất quyết toán cọc (yêu cầu hợp đồng ENDED và cọc giữ = 0)
-      operationId: settleDeposit
-      tags: [Deposits]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ContractDepositSummaryResponse'
-
-  # ----------------------------------------------------
-  # MAINTENANCE ISSUES & FEEDBACK
-  # ----------------------------------------------------
-  /issues:
-    get:
-      summary: Danh sách sự cố sửa chữa
-      operationId: listIssues
-      tags: [Maintenance & Feedback]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: buildingId
-          in: query
-          schema: { type: string, format: uuid }
-        - name: status
-          in: query
-          schema: { type: string, enum: [OPEN, ACCEPTED, IN_PROGRESS, RESOLVED, CLOSED] }
-        - $ref: '#/components/parameters/PageParam'
-        - $ref: '#/components/parameters/SizeParam'
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/IssuePageResponse'
-    post:
-      summary: Báo cáo sự cố mới kèm ảnh
-      operationId: createIssue
-      tags: [Maintenance & Feedback]
-      security:
-        - BearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CreateIssueRequest'
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/IssueDetailResponse'
-
-  /issues/{id}:
-    get:
-      summary: Chi tiết sự cố và lịch sử xử lý
-      operationId: getIssue
-      tags: [Maintenance & Feedback]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/IssueDetailResponse'
-
-  /issues/{id}/status:
+                $ref: "#/components/schemas/ApiResponseNotificationDto"
+  /api/v1/notifications/read-all:
     put:
-      summary: Chuyển trạng thái sự cố (Quản lý hoặc Tenant xác nhận đóng/mở lại)
+      tags:
+      - notification-controller
+      operationId: markAllAsRead
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseMapStringString"
+  /api/v1/issues/{id}/status:
+    put:
+      tags:
+      - issue-controller
       operationId: updateIssueStatus
-      tags: [Maintenance & Feedback]
-      security:
-        - BearerAuth: []
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
+      - name: id
+        in: path
         required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
         content:
           application/json:
             schema:
-              type: object
-              required: [status]
-              properties:
-                status: { type: string, enum: [OPEN, ACCEPTED, IN_PROGRESS, RESOLVED, CLOSED] }
-                comment: { type: string }
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/IssueDetailResponse'
-
-  /invoices/{id}/feedback:
-    get:
-      summary: Danh sách thắc mắc/phản hồi của hóa đơn
-      operationId: getInvoiceFeedbacks
-      tags: [Maintenance & Feedback]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FeedbackListResponse'
-    post:
-      summary: Gửi phản hồi thắc mắc về hóa đơn
-      operationId: createInvoiceFeedback
-      tags: [Maintenance & Feedback]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
+              $ref: "#/components/schemas/UpdateIssueStatusRequest"
         required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [message]
-              properties:
-                message: { type: string }
       responses:
-        '201':
+        "200":
+          description: OK
           content:
-            application/json:
+            '*/*':
               schema:
-                $ref: '#/components/schemas/FeedbackDetailResponse'
-
-  /feedback/{id}/replies:
-    post:
-      summary: Trả lời hội thoại thắc mắc hóa đơn
-      operationId: replyInvoiceFeedback
-      tags: [Maintenance & Feedback]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [message]
-              properties:
-                message: { type: string }
-      responses:
-        '201':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/FeedbackDetailResponse'
-
-  # ----------------------------------------------------
-  # NOTIFICATIONS, REPORTING & FILES
-  # ----------------------------------------------------
-  /notifications:
-    get:
-      summary: Danh sách thông báo nội bộ của người dùng
-      operationId: listNotifications
-      tags: [Operations]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: unreadOnly
-          in: query
-          schema: { type: boolean, default: false }
-        - $ref: '#/components/parameters/PageParam'
-        - $ref: '#/components/parameters/SizeParam'
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/NotificationPageResponse'
-
-  /notifications/{id}/read:
+                $ref: "#/components/schemas/ApiResponseIssueDto"
+  /api/v1/issues/{id}/assign:
     put:
-      summary: Đánh dấu đã đọc thông báo
-      operationId: markNotificationAsRead
-      tags: [Operations]
-      security:
-        - BearerAuth: []
+      tags:
+      - issue-controller
+      operationId: assignIssue
       parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessMessageResponse'
-
-  /notifications/broadcast:
-    post:
-      summary: Soạn thông báo nội bộ gửi cho người đại diện trong tòa (Quản lý)
-      operationId: broadcastNotification
-      tags: [Operations]
-      security:
-        - BearerAuth: []
-      requestBody:
+      - name: id
+        in: path
         required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/BroadcastNotificationRequest'
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessMessageResponse'
-
-  /reporting/dashboard:
-    get:
-      summary: Dữ liệu Dashboard theo phạm vi quyền và tháng chọn
-      operationId: getDashboardMetrics
-      tags: [Operations]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: buildingId
-          in: query
-          schema: { type: string, format: uuid }
-        - name: month
-          in: query
-          schema: { type: string, example: "2026-09" }
-      responses:
-        '200':
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/DashboardMetricsResponse'
-
-  /files/upload:
-    post:
-      summary: Tải ảnh riêng tư lên private storage (JPEG/PNG/WebP, <= 5MB)
-      operationId: uploadPrivateFile
-      tags: [Operations]
-      security:
-        - BearerAuth: []
-      requestBody:
+              $ref: "#/components/schemas/AssignIssueRequest"
         required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseIssueDto"
+  /api/v1/feedback/{id}/status:
+    put:
+      tags:
+      - feedback-controller
+      operationId: updateFeedbackStatus
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateFeedbackStatusRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseFeedbackDto"
+  /api/v1/consumption-alerts/{id}/acknowledge:
+    put:
+      tags:
+      - metering-controller
+      operationId: acknowledgeAlert
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AcknowledgeAlertRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseConsumptionAlertResponse"
+  /api/v1/buildings/{id}:
+    get:
+      tags:
+      - property-controller
+      operationId: getBuilding
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseBuildingResponse"
+    put:
+      tags:
+      - property-controller
+      operationId: updateBuilding
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BuildingRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseBuildingResponse"
+  /api/v1/buildings/{id}/billing-settings:
+    get:
+      tags:
+      - pricing-controller
+      operationId: getBillingSettings
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseBuildingBillingSettingsResponse"
+    put:
+      tags:
+      - pricing-controller
+      operationId: updateBillingSettings
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/UpdateBuildingBillingSettingsRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseBuildingBillingSettingsResponse"
+  /api/v1/users:
+    get:
+      tags:
+      - user-controller
+      operationId: listUsers
+      parameters:
+      - name: role
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - OWNER
+          - STAFF
+          - TENANT
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseListUserSummaryDto"
+    post:
+      tags:
+      - user-controller
+      operationId: createStaff
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateStaffRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseStaffInviteResponse"
+  /api/v1/users/{id}/reissue-invite:
+    post:
+      tags:
+      - user-controller
+      operationId: reissueInvite
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseMapStringString"
+  /api/v1/tenants:
+    get:
+      tags:
+      - tenancy-controller
+      operationId: listTenants
+      parameters:
+      - name: query
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: pageable
+        in: query
+        required: true
+        schema:
+          $ref: "#/components/schemas/Pageable"
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseListTenantSummary"
+    post:
+      tags:
+      - tenancy-controller
+      operationId: createTenant
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTenantRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseTenantSummary"
+  /api/v1/tenants/{id}/invite:
+    post:
+      tags:
+      - tenancy-controller
+      operationId: issueTenantInvite
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseTenantInviteResponse"
+  /api/v1/services:
+    get:
+      tags:
+      - pricing-controller
+      operationId: listServices
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseListServiceDefinitionResponse"
+    post:
+      tags:
+      - pricing-controller
+      operationId: createService
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateServiceRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseServiceDefinitionResponse"
+  /api/v1/payments/transfer-credit:
+    post:
+      tags:
+      - payment-controller
+      operationId: transferCredit
+      parameters:
+      - name: X-Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/TransferCreditRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseInvoiceFinancialStatusResponse"
+  /api/v1/payments/refund:
+    post:
+      tags:
+      - payment-controller
+      operationId: refundCredit
+      parameters:
+      - name: X-Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefundRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseInvoiceFinancialStatusResponse"
+  /api/v1/payments/record:
+    post:
+      tags:
+      - payment-controller
+      operationId: recordPayment
+      parameters:
+      - name: X-Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordPaymentRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseInvoiceFinancialStatusResponse"
+  /api/v1/payments/correct:
+    post:
+      tags:
+      - payment-controller
+      operationId: correctPayment
+      parameters:
+      - name: X-Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/PaymentCorrectionRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseInvoiceFinancialStatusResponse"
+  /api/v1/notifications/broadcast:
+    post:
+      tags:
+      - notification-controller
+      operationId: broadcastNotification
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BroadcastNotificationRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseMapStringObject"
+  /api/v1/meters/readings:
+    post:
+      tags:
+      - metering-controller
+      operationId: recordReading
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordReadingRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseMeterReadingResponse"
+  /api/v1/meters/readings/bulk:
+    post:
+      tags:
+      - metering-controller
+      operationId: recordBulkReadings
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkRecordReadingRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseListMeterReadingResponse"
+  /api/v1/issues:
+    get:
+      tags:
+      - issue-controller
+      operationId: listIssues
+      parameters:
+      - name: contractId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: roomId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - OPEN
+          - ACCEPTED
+          - IN_PROGRESS
+          - RESOLVED
+          - CLOSED
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseListIssueDto"
+    post:
+      tags:
+      - issue-controller
+      operationId: createIssue
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateIssueRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseIssueDto"
+  /api/v1/invoices/{id}/notes:
+    post:
+      tags:
+      - invoice-controller
+      operationId: addNote
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddInvoiceNoteRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseMapStringString"
+  /api/v1/invoices/{id}/issue:
+    post:
+      tags:
+      - invoice-controller
+      operationId: issueInvoice
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: X-Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseInvoiceDetailResponse"
+  /api/v1/invoices/{id}/feedback:
+    get:
+      tags:
+      - feedback-controller
+      operationId: getInvoiceFeedbacks
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseListFeedbackDto"
+    post:
+      tags:
+      - feedback-controller
+      operationId: createInvoiceFeedback
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateFeedbackRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseFeedbackDto"
+  /api/v1/invoices/{id}/adjust:
+    post:
+      tags:
+      - invoice-controller
+      operationId: adjustInvoice
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: X-Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AdjustInvoiceRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseInvoiceDetailResponse"
+  /api/v1/invoices/preview:
+    post:
+      tags:
+      - invoice-controller
+      operationId: previewInvoice
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoicePreviewRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseInvoiceDetailResponse"
+  /api/v1/invoices/draft:
+    post:
+      tags:
+      - invoice-controller
+      operationId: createOrRecalculateDraft
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/InvoicePreviewRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseInvoiceDetailResponse"
+  /api/v1/files/upload:
+    post:
+      tags:
+      - file-controller
+      operationId: uploadFile
+      parameters:
+      - name: parentType
+        in: query
+        required: true
+        schema:
+          type: string
+          enum:
+          - METER_READING
+          - MAINTENANCE_ISSUE
+          - INVOICE_FEEDBACK
+      - name: parentId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      requestBody:
         content:
           multipart/form-data:
             schema:
+              required:
+              - file
               type: object
-              required: [file, parentType, parentId]
               properties:
                 file:
                   type: string
                   format: binary
-                parentType:
-                  type: string
-                  enum: [METER_READING, MAINTENANCE_ISSUE, INVOICE_FEEDBACK]
-                parentId:
-                  type: string
-                  format: uuid
       responses:
-        '201':
+        "200":
+          description: OK
           content:
-            application/json:
+            '*/*':
               schema:
-                $ref: '#/components/schemas/StoredFileResponse'
-
-  /files/{id}:
-    get:
-      summary: Tải ảnh bảo mật với kiểm tra quyền truy cập bản ghi cha
-      operationId: downloadPrivateFile
-      tags: [Operations]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        '200':
-          description: Nội dung nhị phân của ảnh
-          content:
-            image/jpeg: { schema: { type: string, format: binary } }
-            image/png: { schema: { type: string, format: binary } }
-            image/webp: { schema: { type: string, format: binary } }
-        '403':
-          $ref: '#/components/responses/ErrorResponse'
-        '404':
-          $ref: '#/components/responses/ErrorResponse'
-
-  # ----------------------------------------------------
-  # NOTIFICATIONS (THÔNG BÁO NỘI BỘ TRONG APP)
-  # ----------------------------------------------------
-  /notifications:
-    get:
-      summary: Lấy danh sách thông báo của tài khoản hiện tại
-      operationId: listNotifications
-      tags: [Notifications]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: unreadOnly
-          in: query
-          required: false
-          schema: { type: boolean, default: false }
-        - $ref: '#/components/parameters/PageParam'
-        - $ref: '#/components/parameters/SizeParam'
-      responses:
-        '200':
-          description: Danh sách thông báo
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/NotificationPageResponse'
-
-  /notifications/unread-count:
-    get:
-      summary: Đếm số lượng thông báo chưa đọc
-      operationId: getUnreadNotificationCount
-      tags: [Notifications]
-      security:
-        - BearerAuth: []
-      responses:
-        '200':
-          description: Số lượng thông báo chưa đọc
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  data:
-                    type: object
-                    properties:
-                      count: { type: integer, example: 3 }
-                  meta: { $ref: '#/components/schemas/ApiMeta' }
-
-  /notifications/{id}/read:
-    put:
-      summary: Đánh dấu một thông báo là đã đọc
-      operationId: markNotificationRead
-      tags: [Notifications]
-      security:
-        - BearerAuth: []
-      parameters:
-        - name: id
-          in: path
-          required: true
-          schema: { type: string, format: uuid }
-      responses:
-        '200':
-          description: Đã đánh dấu đọc thành công
-
-  /notifications/read-all:
-    put:
-      summary: Đánh dấu tất cả thông báo là đã đọc
-      operationId: markAllNotificationsRead
-      tags: [Notifications]
-      security:
-        - BearerAuth: []
-      responses:
-        '200':
-          description: Đã đánh dấu tất cả là đã đọc
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/SuccessMessageResponse'
-
-  /notifications/broadcast:
+                $ref: "#/components/schemas/ApiResponseStoredFileDto"
+  /api/v1/feedback/{id}/replies:
     post:
-      summary: Phát thông báo toàn tòa nhà tới các hợp đồng ACTIVE (OWNER / STAFF)
-      operationId: broadcastNotification
-      tags: [Notifications]
-      security:
-        - BearerAuth: []
-      requestBody:
+      tags:
+      - feedback-controller
+      operationId: replyInvoiceFeedback
+      parameters:
+      - name: id
+        in: path
         required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/BroadcastNotificationRequest'
+              $ref: "#/components/schemas/ReplyFeedbackRequest"
+        required: true
       responses:
-        '200':
-          description: Phát thông báo thành công
+        "200":
+          description: OK
           content:
-            application/json:
+            '*/*':
               schema:
-                type: object
-                properties:
-                  data:
-                    type: object
-                    properties:
-                      status: { type: string, example: "SUCCESS" }
-                      buildingId: { type: string, format: uuid }
-                      sentCount: { type: integer, example: 12 }
-                  meta: { $ref: '#/components/schemas/ApiMeta' }
-
-  # ----------------------------------------------------
-  # REPORTING & FINANCIAL DASHBOARD
-  # ----------------------------------------------------
-  /reporting/dashboard:
-    get:
-      summary: Lấy dữ liệu bảng điều khiển đối chiếu dòng tiền & hiện trạng phòng (BR-148..BR-160)
-      operationId: getDashboardMetrics
-      tags: [Reporting]
-      security:
-        - BearerAuth: []
+                $ref: "#/components/schemas/ApiResponseFeedbackDto"
+  /api/v1/deposits/settle:
+    post:
+      tags:
+      - deposit-controller
+      operationId: settleDeposit
       parameters:
-        - name: buildingId
-          in: query
-          required: false
-          schema: { type: string, format: uuid }
-          description: Lọc theo tòa nhà (nếu null lấy toàn bộ phạm vi cho phép)
-        - name: billingMonth
-          in: query
-          required: false
-          schema: { type: string, example: "2026-09" }
-          description: Kỳ đối chiếu dạng YYYY-MM
+      - name: X-Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SettleDepositRequest"
+        required: true
       responses:
-        '200':
-          description: Số liệu báo cáo đối chiếu tài chính và hiện trạng phòng
+        "200":
+          description: OK
           content:
-            application/json:
+            '*/*':
               schema:
-                $ref: '#/components/schemas/DashboardMetricsResponse'
-        '403':
-          $ref: '#/components/responses/ErrorResponse'
-
-# ----------------------------------------------------
-# COMPONENTS & SCHEMAS
-# ----------------------------------------------------
+                $ref: "#/components/schemas/ApiResponseContractDepositFinancialStatusResponse"
+  /api/v1/deposits/refund:
+    post:
+      tags:
+      - deposit-controller
+      operationId: refundDeposit
+      parameters:
+      - name: X-Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefundDepositRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseContractDepositFinancialStatusResponse"
+  /api/v1/deposits/receipt:
+    post:
+      tags:
+      - deposit-controller
+      operationId: recordReceipt
+      parameters:
+      - name: X-Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RecordDepositReceiptRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseContractDepositFinancialStatusResponse"
+  /api/v1/deposits/offset-invoice:
+    post:
+      tags:
+      - deposit-controller
+      operationId: offsetDepositToInvoice
+      parameters:
+      - name: X-Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/OffsetDepositToInvoiceRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseContractDepositFinancialStatusResponse"
+  /api/v1/deposits/deduct:
+    post:
+      tags:
+      - deposit-controller
+      operationId: deductDeposit
+      parameters:
+      - name: X-Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DeductDepositRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseContractDepositFinancialStatusResponse"
+  /api/v1/deposits/correct:
+    post:
+      tags:
+      - deposit-controller
+      operationId: correctReceipt
+      parameters:
+      - name: X-Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CorrectDepositReceiptRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseContractDepositFinancialStatusResponse"
+  /api/v1/contracts:
+    get:
+      tags:
+      - tenancy-controller
+      operationId: listContracts
+      parameters:
+      - name: buildingId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: roomId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - DRAFT
+          - ACTIVE
+          - ENDED
+      - name: pageable
+        in: query
+        required: true
+        schema:
+          $ref: "#/components/schemas/Pageable"
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseListContractSummary"
+    post:
+      tags:
+      - tenancy-controller
+      operationId: createContractDraft
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateContractRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseContractSummary"
+  /api/v1/contracts/{id}/services:
+    get:
+      tags:
+      - pricing-controller
+      operationId: listSubscriptions
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseListSubscriptionResponse"
+    post:
+      tags:
+      - pricing-controller
+      operationId: subscribeService
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateSubscriptionRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseSubscriptionResponse"
+  /api/v1/contracts/{id}/one-off-charges:
+    get:
+      tags:
+      - pricing-controller
+      operationId: listOneOffCharges
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: billingMonth
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseListOneOffChargeResponse"
+    post:
+      tags:
+      - pricing-controller
+      operationId: createOneOffCharge
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOneOffChargeRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseOneOffChargeResponse"
+  /api/v1/contracts/{id}/members:
+    get:
+      tags:
+      - tenancy-controller
+      operationId: listMembers
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseListContractMemberResponse"
+    post:
+      tags:
+      - tenancy-controller
+      operationId: addMember
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AddMemberRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseContractMemberResponse"
+  /api/v1/contracts/{id}/extend:
+    post:
+      tags:
+      - tenancy-controller
+      operationId: extendContract
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExtendContractRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseContractSummary"
+  /api/v1/contracts/{id}/checkout:
+    post:
+      tags:
+      - tenancy-controller
+      operationId: checkoutContract
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CheckoutContractRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseContractSummary"
+  /api/v1/contracts/{id}/activate:
+    post:
+      tags:
+      - tenancy-controller
+      operationId: activateContract
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActivateContractRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseContractSummary"
+  /api/v1/buildings:
+    get:
+      tags:
+      - property-controller
+      operationId: listBuildings
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseListBuildingResponse"
+    post:
+      tags:
+      - property-controller
+      operationId: createBuilding
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BuildingRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseBuildingResponse"
+  /api/v1/buildings/{id}/tariffs:
+    get:
+      tags:
+      - pricing-controller
+      operationId: listTariffs
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseListTariffResponse"
+    post:
+      tags:
+      - pricing-controller
+      operationId: createTariff
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateTariffRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseTariffResponse"
+  /api/v1/buildings/{id}/rooms:
+    get:
+      tags:
+      - property-controller
+      operationId: listRooms
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: floorId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - VACANT
+          - RENTED
+          - DEPOSIT_RESERVED
+          - MAINTENANCE
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseListRoomResponse"
+    post:
+      tags:
+      - property-controller
+      operationId: createRoom
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoomRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseRoomResponse"
+  /api/v1/buildings/{id}/floors:
+    get:
+      tags:
+      - property-controller
+      operationId: listFloors
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseListFloorResponse"
+    post:
+      tags:
+      - property-controller
+      operationId: createFloor
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/FloorRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseFloorResponse"
+  /api/v1/auth/web/refresh:
+    post:
+      tags:
+      - auth-controller
+      operationId: refreshWeb
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseAuthResponseData"
+  /api/v1/auth/web/logout:
+    post:
+      tags:
+      - auth-controller
+      operationId: logoutWeb
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseMapStringString"
+  /api/v1/auth/reset-password:
+    post:
+      tags:
+      - auth-controller
+      operationId: resetPassword
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActivateInviteRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseMapStringString"
+  /api/v1/auth/mobile/refresh:
+    post:
+      tags:
+      - auth-controller
+      operationId: refreshMobile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MobileRefreshRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseAuthResponseData"
+  /api/v1/auth/mobile/logout:
+    post:
+      tags:
+      - auth-controller
+      operationId: logoutMobile
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MobileRefreshRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseMapStringString"
+  /api/v1/auth/mobile/login:
+    post:
+      tags:
+      - auth-controller
+      operationId: login
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseAuthResponseData"
+  /api/v1/auth/web/login:
+    post:
+      tags:
+      - auth-controller
+      operationId: login_1
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseAuthResponseData"
+  /api/v1/auth/change-password:
+    post:
+      tags:
+      - auth-controller
+      operationId: changePassword
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ChangePasswordRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseMapStringString"
+  /api/v1/auth/activate:
+    post:
+      tags:
+      - auth-controller
+      operationId: activate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ActivateInviteRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseMapStringString"
+  /api/v1/rooms/{id}/bookable:
+    patch:
+      tags:
+      - property-controller
+      operationId: setRoomBookable
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RoomBookableRequest"
+        required: true
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseRoomResponse"
+  /api/v1/buildings/{id}/active:
+    patch:
+      tags:
+      - property-controller
+      operationId: toggleBuildingActive
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: active
+        in: query
+        required: true
+        schema:
+          type: boolean
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseVoid"
+  /api/v1/tenants/{id}:
+    get:
+      tags:
+      - tenancy-controller
+      operationId: getTenant
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseTenantSummary"
+  /api/v1/rooms/{id}/meters:
+    get:
+      tags:
+      - tenancy-controller
+      operationId: getRoomMeters
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseListRoomMeterResponse"
+  /api/v1/rooms/{id}/meter-readings:
+    get:
+      tags:
+      - metering-controller
+      operationId: listReadingsByRoom
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseListMeterReadingResponse"
+  /api/v1/reporting/dashboard:
+    get:
+      tags:
+      - reporting-controller
+      operationId: getDashboardMetrics
+      parameters:
+      - name: buildingId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: billingMonth
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: cashFrom
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      - name: cashTo
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      - name: asOf
+        in: query
+        required: false
+        schema:
+          type: string
+          format: date
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseDashboardMetricsDto"
+  /api/v1/notifications:
+    get:
+      tags:
+      - notification-controller
+      operationId: listNotifications
+      parameters:
+      - name: unreadOnly
+        in: query
+        required: false
+        schema:
+          type: boolean
+          default: false
+      - name: pageable
+        in: query
+        required: true
+        schema:
+          $ref: "#/components/schemas/Pageable"
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponsePageNotificationDto"
+  /api/v1/notifications/unread-count:
+    get:
+      tags:
+      - notification-controller
+      operationId: getUnreadCount
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseMapStringLong"
+  /api/v1/issues/{id}:
+    get:
+      tags:
+      - issue-controller
+      operationId: getIssue
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseIssueDto"
+  /api/v1/invoices:
+    get:
+      tags:
+      - invoice-controller
+      operationId: listInvoices
+      parameters:
+      - name: contractId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: buildingId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: billingMonth
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum:
+          - DRAFT
+          - ISSUED
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      - name: size
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 20
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponsePageInvoiceSummaryResponse"
+  /api/v1/invoices/{invoiceId}/financial-status:
+    get:
+      tags:
+      - payment-controller
+      operationId: getFinancialStatus
+      parameters:
+      - name: invoiceId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseInvoiceFinancialStatusResponse"
+  /api/v1/invoices/{id}:
+    get:
+      tags:
+      - invoice-controller
+      operationId: getInvoice
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseInvoiceDetailResponse"
+  /api/v1/files/{id}:
+    get:
+      tags:
+      - file-controller
+      operationId: downloadFile
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                type: string
+                format: byte
+  /api/v1/feedback:
+    get:
+      tags:
+      - feedback-controller
+      operationId: getAllFeedbacks
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseListFeedbackDto"
+  /api/v1/deposits/contract/{contractId}:
+    get:
+      tags:
+      - deposit-controller
+      operationId: getContractDepositStatus
+      parameters:
+      - name: contractId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseContractDepositFinancialStatusResponse"
+  /api/v1/contracts/{id}:
+    get:
+      tags:
+      - tenancy-controller
+      operationId: getContract
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseContractSummary"
+  /api/v1/contracts/{id}/consumption-alerts:
+    get:
+      tags:
+      - metering-controller
+      operationId: listAlerts
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      - name: billingMonth
+        in: query
+        required: false
+        schema:
+          type: string
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseListConsumptionAlertResponse"
+  /api/v1/auth/me:
+    get:
+      tags:
+      - auth-controller
+      operationId: getCurrentUser
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseUserProfileData"
+  /api/v1/auth/csrf:
+    get:
+      tags:
+      - auth-controller
+      operationId: getCsrfToken
+      parameters:
+      - name: csrf
+        in: query
+        required: true
+        schema:
+          $ref: "#/components/schemas/CsrfToken"
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseMapStringString"
+  /api/v1/audit:
+    get:
+      tags:
+      - audit-controller
+      operationId: list
+      parameters:
+      - name: buildingId
+        in: query
+        required: false
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        in: query
+        required: false
+        schema:
+          type: integer
+          format: int32
+          default: 0
+      responses:
+        "200":
+          description: OK
+          content:
+            '*/*':
+              schema:
+                $ref: "#/components/schemas/ApiResponseListMapStringObject"
 components:
-  securitySchemes:
-    BearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
-
-  parameters:
-    PageParam:
-      name: page
-      in: query
-      required: false
-      schema: { type: integer, default: 0 }
-    SizeParam:
-      name: size
-      in: query
-      required: false
-      schema: { type: integer, default: 20 }
-    IdempotencyKeyHeader:
-      name: Idempotency-Key
-      in: header
-      required: true
-      schema: { type: string, format: uuid }
-      description: Khóa chống trùng giao dịch tài chính do client sinh ra.
-
-  responses:
-    ErrorResponse:
-      description: Lỗi nghiệp vụ hoặc hệ thống
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ApiError'
-
   schemas:
-    ApiMeta:
+    UpdateUserStatusRequest:
       type: object
       properties:
-        traceId: { type: string }
-
-    PageMeta:
+        enabled:
+          type: boolean
+    ApiResponseUserSummaryDto:
       type: object
       properties:
-        page: { type: integer }
-        size: { type: integer }
-        totalElements: { type: integer }
-        totalPages: { type: integer }
-        traceId: { type: string }
-
-    ApiError:
-      type: object
-      required: [code, message, traceId]
-      properties:
-        code:
-          type: string
-          example: "VALIDATION_ERROR"
-        message:
-          type: string
-          example: "Dữ liệu yêu cầu không hợp lệ"
-        fieldErrors:
-          type: array
-          items:
+        data:
+          $ref: "#/components/schemas/UserSummaryDto"
+        meta:
+          type: object
+          additionalProperties:
             type: object
-            properties:
-              field: { type: string }
-              message: { type: string }
-        traceId:
+        success:
+          type: boolean
+    UserSummaryDto:
+      type: object
+      properties:
+        id:
           type: string
-
-    SuccessMessageResponse:
+          format: uuid
+        login:
+          type: string
+        role:
+          type: string
+          enum:
+          - OWNER
+          - STAFF
+          - TENANT
+        enabled:
+          type: boolean
+    UpdateAssignmentsRequest:
       type: object
       properties:
-        data:
-          type: object
-          properties:
-            message: { type: string }
-        meta:
-          $ref: '#/components/schemas/ApiMeta'
-
-    LoginRequest:
-      type: object
-      required: [login, password]
-      properties:
-        login: { type: string, example: "owner" }
-        password: { type: string, example: "TroHub@123" }
-
-    ActivateInviteRequest:
-      type: object
-      required: [inviteCode, password]
-      properties:
-        inviteCode: { type: string, example: "INV-982314" }
-        password: { type: string, example: "TenantSecurePass@123" }
-
-    AuthResponse:
-      type: object
-      properties:
-        data:
-          type: object
-          properties:
-            accessToken: { type: string }
-            tokenType: { type: string, example: "Bearer" }
-            expiresIn: { type: integer, example: 900 }
-            refreshToken: { type: string, nullable: true }
-            user:
-              $ref: '#/components/schemas/UserSummary'
-        meta:
-          $ref: '#/components/schemas/ApiMeta'
-
-    UserSummary:
-      type: object
-      properties:
-        id: { type: string, format: uuid }
-        login: { type: string }
-        role: { type: string, enum: [OWNER, STAFF, TENANT] }
-        enabled: { type: boolean }
-
-    UserProfileResponse:
-      type: object
-      properties:
-        data:
-          type: object
-          properties:
-            id: { type: string, format: uuid }
-            login: { type: string }
-            role: { type: string, enum: [OWNER, STAFF, TENANT] }
-            fullName: { type: string, nullable: true }
-            assignedBuildingIds:
-              type: array
-              items: { type: string, format: uuid }
-        meta:
-          $ref: '#/components/schemas/ApiMeta'
-
-    CreateStaffRequest:
-      type: object
-      required: [login, password]
-      properties:
-        login: { type: string }
-        password: { type: string }
         buildingIds:
           type: array
-          items: { type: string, format: uuid }
-
-    UserDetailResponse:
+          items:
+            type: string
+            format: uuid
+    ApiResponseMapStringString:
       type: object
       properties:
         data:
-          $ref: '#/components/schemas/UserSummary'
+          type: object
+          additionalProperties:
+            type: string
         meta:
-          $ref: '#/components/schemas/ApiMeta'
-
-    UserPageResponse:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    RoomRequest:
+      required:
+      - basePrice
+      - depositAmount
+      - roomNumber
+      type: object
+      properties:
+        floorId:
+          type: string
+          format: uuid
+        roomNumber:
+          minLength: 1
+          type: string
+        basePrice:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        depositAmount:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        area:
+          minimum: 0
+          exclusiveMinimum: false
+          type: number
+        maxTenants:
+          minimum: 1
+          type: integer
+          format: int32
+        bookable:
+          type: boolean
+    ApiResponseRoomResponse:
       type: object
       properties:
         data:
-          type: array
-          items: { $ref: '#/components/schemas/UserSummary' }
+          $ref: "#/components/schemas/RoomResponse"
         meta:
-          $ref: '#/components/schemas/PageMeta'
-
-    # Buildings & Rooms
-    BuildingSummary:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    RoomResponse:
       type: object
       properties:
-        id: { type: string, format: uuid }
-        name: { type: string }
-        address: { type: string }
-        active: { type: boolean }
-
-    CreateBuildingRequest:
-      type: object
-      required: [name, address]
-      properties:
-        name: { type: string }
-        address: { type: string }
-
-    UpdateBuildingRequest:
-      type: object
-      required: [name, address, active]
-      properties:
-        name: { type: string }
-        address: { type: string }
-        active: { type: boolean }
-
-    BuildingDetailResponse:
-      type: object
-      properties:
-        data: { $ref: '#/components/schemas/BuildingSummary' }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
-    BuildingListResponse:
-      type: object
-      properties:
-        data:
-          type: array
-          items: { $ref: '#/components/schemas/BuildingSummary' }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
-    FloorSummary:
-      type: object
-      properties:
-        id: { type: string, format: uuid }
-        buildingId: { type: string, format: uuid }
-        label: { type: string }
-        sortOrder: { type: integer }
-        active: { type: boolean }
-
-    CreateFloorRequest:
-      type: object
-      required: [label, sortOrder]
-      properties:
-        label: { type: string }
-        sortOrder: { type: integer }
-
-    FloorDetailResponse:
-      type: object
-      properties:
-        data: { $ref: '#/components/schemas/FloorSummary' }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
-    FloorListResponse:
+        id:
+          type: string
+          format: uuid
+        buildingId:
+          type: string
+          format: uuid
+        buildingName:
+          type: string
+        floorId:
+          type: string
+          format: uuid
+        floorName:
+          type: string
+        roomNumber:
+          type: string
+        basePrice:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        depositAmount:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        area:
+          type: number
+        maxTenants:
+          type: integer
+          format: int32
+        bookable:
+          type: boolean
+        status:
+          type: string
+          enum:
+          - VACANT
+          - RENTED
+          - DEPOSIT_RESERVED
+          - MAINTENANCE
+        createdAt:
+          type: string
+          format: date-time
+    ApiResponseNotificationDto:
       type: object
       properties:
         data:
-          type: array
-          items: { $ref: '#/components/schemas/FloorSummary' }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
-    RoomSummary:
+          $ref: "#/components/schemas/NotificationDto"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    NotificationDto:
       type: object
       properties:
-        id: { type: string, format: uuid }
-        buildingId: { type: string, format: uuid }
-        floorId: { type: string, format: uuid }
-        code: { type: string }
-        capacity: { type: integer }
-        bookable: { type: boolean }
-        baseRent: { type: string, example: "3500000" }
-        activeContractId: { type: string, format: uuid, nullable: true }
-
-    CreateRoomRequest:
-      type: object
-      required: [buildingId, floorId, code, capacity, baseRent]
-      properties:
-        buildingId: { type: string, format: uuid }
-        floorId: { type: string, format: uuid }
-        code: { type: string }
-        capacity: { type: integer }
-        bookable: { type: boolean, default: true }
-        baseRent: { type: string, example: "3500000" }
-
-    UpdateRoomRequest:
-      type: object
-      required: [code, capacity, baseRent, bookable]
-      properties:
-        code: { type: string }
-        capacity: { type: integer }
-        baseRent: { type: string, example: "3500000" }
-        bookable: { type: boolean }
-
-    RoomDetailResponse:
+        id:
+          type: string
+          format: uuid
+        title:
+          type: string
+        message:
+          type: string
+        type:
+          type: string
+        resourceType:
+          type: string
+        resourceId:
+          type: string
+          format: uuid
+        readAt:
+          type: string
+          format: date-time
+        createdAt:
+          type: string
+          format: date-time
+    UpdateIssueStatusRequest:
+      required:
+      - status
       type: object
       properties:
-        data: { $ref: '#/components/schemas/RoomSummary' }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
-    RoomPageResponse:
+        status:
+          type: string
+          enum:
+          - OPEN
+          - ACCEPTED
+          - IN_PROGRESS
+          - RESOLVED
+          - CLOSED
+        comment:
+          type: string
+    ApiResponseIssueDto:
       type: object
       properties:
         data:
+          $ref: "#/components/schemas/IssueDto"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    IssueDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        contractId:
+          type: string
+          format: uuid
+        roomId:
+          type: string
+          format: uuid
+        roomCode:
+          type: string
+        buildingName:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum:
+          - OPEN
+          - ACCEPTED
+          - IN_PROGRESS
+          - RESOLVED
+          - CLOSED
+        assigneeId:
+          type: string
+          format: uuid
+        assigneeName:
+          type: string
+        createdById:
+          type: string
+          format: uuid
+        createdByName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        fileIds:
           type: array
-          items: { $ref: '#/components/schemas/RoomSummary' }
-        meta: { $ref: '#/components/schemas/PageMeta' }
-
-    # Tenancy & Contracts
+          items:
+            type: string
+            format: uuid
+        history:
+          type: array
+          items:
+            $ref: "#/components/schemas/IssueStatusHistoryDto"
+    IssueStatusHistoryDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        oldStatus:
+          type: string
+          enum:
+          - OPEN
+          - ACCEPTED
+          - IN_PROGRESS
+          - RESOLVED
+          - CLOSED
+        newStatus:
+          type: string
+          enum:
+          - OPEN
+          - ACCEPTED
+          - IN_PROGRESS
+          - RESOLVED
+          - CLOSED
+        comment:
+          type: string
+        actorId:
+          type: string
+          format: uuid
+        actorName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    AssignIssueRequest:
+      required:
+      - assigneeId
+      type: object
+      properties:
+        assigneeId:
+          type: string
+          format: uuid
+    UpdateFeedbackStatusRequest:
+      required:
+      - status
+      type: object
+      properties:
+        status:
+          type: string
+          enum:
+          - OPEN
+          - IN_REVIEW
+          - RESOLVED
+    ApiResponseFeedbackDto:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/FeedbackDto"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    FeedbackDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        invoiceId:
+          type: string
+          format: uuid
+        invoiceCode:
+          type: string
+        createdById:
+          type: string
+          format: uuid
+        createdByName:
+          type: string
+        message:
+          type: string
+        status:
+          type: string
+          enum:
+          - OPEN
+          - IN_REVIEW
+          - RESOLVED
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        replies:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedbackReplyDto"
+    FeedbackReplyDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        feedbackId:
+          type: string
+          format: uuid
+        actorId:
+          type: string
+          format: uuid
+        actorName:
+          type: string
+        message:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    AcknowledgeAlertRequest:
+      required:
+      - reason
+      type: object
+      properties:
+        reason:
+          minLength: 1
+          type: string
+    ApiResponseConsumptionAlertResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/ConsumptionAlertResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    ConsumptionAlertResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        contractId:
+          type: string
+          format: uuid
+        meterType:
+          type: string
+          enum:
+          - ELECTRICITY
+          - WATER
+        billingMonth:
+          type: string
+        readingVersion:
+          type: integer
+          format: int64
+        evaluationStatus:
+          type: string
+          enum:
+          - NORMAL
+          - WARNING
+          - INSUFFICIENT_DATA
+          - NOT_COMPARABLE
+        comparisonSnapshot:
+          type: string
+        acknowledgedByName:
+          type: string
+        acknowledgedAt:
+          type: string
+          format: date-time
+        reason:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    BuildingRequest:
+      required:
+      - address
+      - name
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        address:
+          minLength: 1
+          type: string
+    ApiResponseBuildingResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/BuildingResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    BuildingResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        address:
+          type: string
+        active:
+          type: boolean
+        totalRooms:
+          type: integer
+          format: int64
+        vacantRooms:
+          type: integer
+          format: int64
+        createdAt:
+          type: string
+          format: date-time
+    UpdateBuildingBillingSettingsRequest:
+      type: object
+      properties:
+        dueDays:
+          type: integer
+          format: int32
+        waterAbsoluteThreshold:
+          type: number
+        electricityAbsoluteThreshold:
+          type: number
+    ApiResponseBuildingBillingSettingsResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/BuildingBillingSettingsResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    BuildingBillingSettingsResponse:
+      type: object
+      properties:
+        buildingId:
+          type: string
+          format: uuid
+        dueDays:
+          type: integer
+          format: int32
+        waterAbsoluteThreshold:
+          type: number
+        electricityAbsoluteThreshold:
+          type: number
+    CreateStaffRequest:
+      required:
+      - login
+      type: object
+      properties:
+        login:
+          maxLength: 50
+          minLength: 3
+          type: string
+        password:
+          maxLength: 2147483647
+          minLength: 6
+          type: string
+        buildingIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+    ApiResponseStaffInviteResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/StaffInviteResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    StaffInviteResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        login:
+          type: string
+        role:
+          type: string
+          enum:
+          - OWNER
+          - STAFF
+          - TENANT
+        enabled:
+          type: boolean
+        inviteCode:
+          type: string
+    CreateTenantRequest:
+      required:
+      - citizenId
+      - fullName
+      - phone
+      type: object
+      properties:
+        fullName:
+          minLength: 1
+          type: string
+        phone:
+          minLength: 1
+          type: string
+        citizenId:
+          minLength: 1
+          type: string
+        email:
+          type: string
+    ApiResponseTenantSummary:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/TenantSummary"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
     TenantSummary:
       type: object
       properties:
-        id: { type: string, format: uuid }
-        fullName: { type: string }
-        phone: { type: string }
-        citizenIdMasked: { type: string }
-        email: { type: string, nullable: true }
-        hasUserAccount: { type: boolean }
-
-    CreateTenantRequest:
+        id:
+          type: string
+          format: uuid
+        userId:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+        phone:
+          type: string
+        citizenIdMasked:
+          type: string
+        email:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    ApiResponseTenantInviteResponse:
       type: object
-      required: [fullName, phone, citizenId]
       properties:
-        fullName: { type: string }
-        phone: { type: string }
-        citizenId: { type: string }
-        email: { type: string }
-
-    TenantDetailResponse:
+        data:
+          $ref: "#/components/schemas/TenantInviteResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    TenantInviteResponse:
       type: object
       properties:
-        data: { $ref: '#/components/schemas/TenantSummary' }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
-    TenantPageResponse:
+        inviteCode:
+          type: string
+        expiresAt:
+          type: string
+          format: date-time
+    CreateServiceRequest:
+      required:
+      - calculationType
+      - name
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        unit:
+          type: string
+        calculationType:
+          type: string
+          enum:
+          - ROOM_MONTHLY
+          - PERSON_MONTHLY
+          - METERED
+          - ONE_OFF
+    ApiResponseServiceDefinitionResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/ServiceDefinitionResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    ServiceDefinitionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        unit:
+          type: string
+        calculationType:
+          type: string
+          enum:
+          - ROOM_MONTHLY
+          - PERSON_MONTHLY
+          - METERED
+          - ONE_OFF
+        active:
+          type: boolean
+    TransferCreditRequest:
+      required:
+      - amount
+      - reason
+      - sourceInvoiceId
+      - targetInvoiceId
+      type: object
+      properties:
+        sourceInvoiceId:
+          type: string
+          format: uuid
+        targetInvoiceId:
+          type: string
+          format: uuid
+        amount:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        reason:
+          minLength: 1
+          type: string
+    ApiResponseInvoiceFinancialStatusResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/InvoiceFinancialStatusResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    InvoiceFinancialStatusResponse:
+      type: object
+      properties:
+        invoiceId:
+          type: string
+          format: uuid
+        originalTotal:
+          type: string
+        adjustmentsTotal:
+          type: string
+        effectiveDue:
+          type: string
+        netApplied:
+          type: string
+        debt:
+          type: string
+        credit:
+          type: string
+        paymentStatus:
+          type: string
+          enum:
+          - UNPAID
+          - PARTIAL
+          - PAID
+          - CREDIT
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/LedgerEntryResponse"
+    LedgerEntryResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        invoiceId:
+          type: string
+          format: uuid
+        contractId:
+          type: string
+          format: uuid
+        entryType:
+          type: string
+          enum:
+          - PAYMENT
+          - PAYMENT_CORRECTION
+          - REFUND
+          - CREDIT_APPLIED
+          - CREDIT_OUT
+          - CREDIT_IN
+          - DEPOSIT_OFFSET
+        amount:
+          type: string
+        paymentMethod:
+          type: string
+          enum:
+          - CASH
+          - BANK_TRANSFER
+          - MOMO
+          - VNPAY
+          - INTERNAL_TRANSFER
+        referenceCode:
+          type: string
+        note:
+          type: string
+        refEntryId:
+          type: string
+          format: uuid
+        actorName:
+          type: string
+        recordedAt:
+          type: string
+          format: date-time
+        effectiveDate:
+          type: string
+          format: date
+    RefundRequest:
+      required:
+      - amount
+      - invoiceId
+      - paymentMethod
+      - reason
+      type: object
+      properties:
+        invoiceId:
+          type: string
+          format: uuid
+        amount:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        paymentMethod:
+          type: string
+          enum:
+          - CASH
+          - BANK_TRANSFER
+          - MOMO
+          - VNPAY
+          - INTERNAL_TRANSFER
+        referenceCode:
+          type: string
+        reason:
+          minLength: 1
+          type: string
+    RecordPaymentRequest:
+      required:
+      - amount
+      - invoiceId
+      - paymentMethod
+      type: object
+      properties:
+        invoiceId:
+          type: string
+          format: uuid
+        amount:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        paymentMethod:
+          type: string
+          enum:
+          - CASH
+          - BANK_TRANSFER
+          - MOMO
+          - VNPAY
+          - INTERNAL_TRANSFER
+        referenceCode:
+          type: string
+        note:
+          type: string
+        effectiveDate:
+          type: string
+          format: date
+        overpaymentConfirmed:
+          type: boolean
+    PaymentCorrectionRequest:
+      required:
+      - deltaAmount
+      - reason
+      - refEntryId
+      type: object
+      properties:
+        refEntryId:
+          type: string
+          format: uuid
+        deltaAmount:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        reason:
+          minLength: 1
+          type: string
+    BroadcastNotificationRequest:
+      required:
+      - buildingId
+      - message
+      - title
+      type: object
+      properties:
+        buildingId:
+          type: string
+          format: uuid
+        title:
+          minLength: 1
+          type: string
+        message:
+          minLength: 1
+          type: string
+    ApiResponseMapStringObject:
+      type: object
+      properties:
+        data:
+          type: object
+          additionalProperties:
+            type: object
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    RecordReadingRequest:
+      required:
+      - meterId
+      - value
+      type: object
+      properties:
+        meterId:
+          type: string
+          format: uuid
+        readingDate:
+          type: string
+          format: date
+        value:
+          minimum: 0
+          exclusiveMinimum: false
+          type: number
+        fileId:
+          type: string
+          format: uuid
+    ApiResponseMeterReadingResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/MeterReadingResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    MeterReadingResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        meterId:
+          type: string
+          format: uuid
+        meterType:
+          type: string
+          enum:
+          - ELECTRICITY
+          - WATER
+        roomCode:
+          type: string
+        readingDate:
+          type: string
+          format: date
+        value:
+          type: number
+        kind:
+          type: string
+          enum:
+          - HANDOVER
+          - PERIOD_END
+          - CHECKOUT
+        fileId:
+          type: string
+          format: uuid
+        createdByName:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+    BulkRecordReadingItem:
+      required:
+      - meterId
+      - value
+      type: object
+      properties:
+        meterId:
+          type: string
+          format: uuid
+        value:
+          minimum: 0
+          exclusiveMinimum: false
+          type: number
+    BulkRecordReadingRequest:
+      required:
+      - readings
+      type: object
+      properties:
+        readingDate:
+          type: string
+          format: date
+        readings:
+          type: array
+          items:
+            $ref: "#/components/schemas/BulkRecordReadingItem"
+    ApiResponseListMeterReadingResponse:
       type: object
       properties:
         data:
           type: array
-          items: { $ref: '#/components/schemas/TenantSummary' }
-        meta: { $ref: '#/components/schemas/PageMeta' }
-
+          items:
+            $ref: "#/components/schemas/MeterReadingResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    CreateIssueRequest:
+      required:
+      - contractId
+      - description
+      - roomId
+      - title
+      type: object
+      properties:
+        contractId:
+          type: string
+          format: uuid
+        roomId:
+          type: string
+          format: uuid
+        title:
+          minLength: 1
+          type: string
+        description:
+          minLength: 1
+          type: string
+        fileIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+    AddInvoiceNoteRequest:
+      required:
+      - content
+      - reason
+      type: object
+      properties:
+        content:
+          minLength: 1
+          type: string
+        reason:
+          minLength: 1
+          type: string
+    ApiResponseInvoiceDetailResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/InvoiceDetailResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    InvoiceAdjustmentResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        deltaAmount:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        reason:
+          type: string
+        effectiveDate:
+          type: string
+          format: date
+        recordedAt:
+          type: string
+          format: date-time
+        createdByName:
+          type: string
+    InvoiceDetailResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        contractId:
+          type: string
+          format: uuid
+        roomName:
+          type: string
+        buildingName:
+          type: string
+        tenantName:
+          type: string
+        billingMonth:
+          type: string
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - ISSUED
+        periodStart:
+          type: string
+          format: date
+        periodEndExclusive:
+          type: string
+          format: date
+        dueDate:
+          type: string
+          format: date
+        issuedAt:
+          type: string
+          format: date-time
+        originalTotal:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        adjustmentsTotal:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        effectiveDue:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        netApplied:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        debt:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        credit:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        paymentStatus:
+          type: string
+          enum:
+          - UNPAID
+          - PARTIAL
+          - PAID
+          - CREDIT
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceItemResponse"
+        adjustments:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceAdjustmentResponse"
+        notes:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceNoteResponse"
+    InvoiceItemResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+          - RENT
+          - ELECTRICITY
+          - WATER
+          - SERVICE
+          - ONE_OFF
+        label:
+          type: string
+        quantity:
+          type: number
+        unitPrice:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        amount:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        calculationSnapshot:
+          type: string
+        readingRefs:
+          type: string
+        tariffRef:
+          type: string
+          format: uuid
+    InvoiceNoteResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        content:
+          type: string
+        reason:
+          type: string
+        recordedAt:
+          type: string
+          format: date-time
+        createdByName:
+          type: string
+    CreateFeedbackRequest:
+      required:
+      - message
+      type: object
+      properties:
+        message:
+          minLength: 1
+          type: string
+    AdjustInvoiceRequest:
+      required:
+      - deltaAmount
+      - effectiveDate
+      - reason
+      type: object
+      properties:
+        deltaAmount:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        reason:
+          minLength: 1
+          type: string
+        effectiveDate:
+          type: string
+          format: date
+    InvoicePreviewRequest:
+      required:
+      - billingMonth
+      - contractId
+      type: object
+      properties:
+        contractId:
+          type: string
+          format: uuid
+        billingMonth:
+          minLength: 1
+          type: string
+    ApiResponseStoredFileDto:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/StoredFileDto"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    StoredFileDto:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        originalName:
+          type: string
+        mimeType:
+          type: string
+        size:
+          type: integer
+          format: int64
+        parentType:
+          type: string
+          enum:
+          - METER_READING
+          - MAINTENANCE_ISSUE
+          - INVOICE_FEEDBACK
+        parentId:
+          type: string
+          format: uuid
+        createdAt:
+          type: string
+          format: date-time
+    ReplyFeedbackRequest:
+      required:
+      - message
+      type: object
+      properties:
+        message:
+          minLength: 1
+          type: string
+    SettleDepositRequest:
+      required:
+      - contractId
+      type: object
+      properties:
+        contractId:
+          type: string
+          format: uuid
+        note:
+          type: string
+    ApiResponseContractDepositFinancialStatusResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/ContractDepositFinancialStatusResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    ContractDepositFinancialStatusResponse:
+      type: object
+      properties:
+        contractId:
+          type: string
+          format: uuid
+        roomName:
+          type: string
+        buildingName:
+          type: string
+        tenantName:
+          type: string
+        depositRequired:
+          type: string
+        depositHeld:
+          type: string
+        totalReceipt:
+          type: string
+        totalRefund:
+          type: string
+        totalDeduction:
+          type: string
+        totalOffset:
+          type: string
+        depositStatus:
+          type: string
+          enum:
+          - NOT_RECEIVED
+          - HOLDING
+          - SETTLING
+          - SETTLED
+        settledAt:
+          type: string
+          format: date-time
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/DepositLedgerEntryResponse"
+    DepositLedgerEntryResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        contractId:
+          type: string
+          format: uuid
+        entryType:
+          type: string
+          enum:
+          - RECEIPT
+          - RECEIPT_CORRECTION
+          - REFUND
+          - DEDUCTION
+          - OFFSET_OUT
+        amount:
+          type: string
+        paymentMethod:
+          type: string
+          enum:
+          - CASH
+          - BANK_TRANSFER
+          - MOMO
+          - VNPAY
+          - INTERNAL_TRANSFER
+        referenceCode:
+          type: string
+        note:
+          type: string
+        reason:
+          type: string
+        refEntryId:
+          type: string
+          format: uuid
+        invoiceId:
+          type: string
+          format: uuid
+        actorId:
+          type: string
+          format: uuid
+        actorName:
+          type: string
+        recordedAt:
+          type: string
+          format: date-time
+    RefundDepositRequest:
+      required:
+      - amount
+      - contractId
+      - reason
+      type: object
+      properties:
+        contractId:
+          type: string
+          format: uuid
+        amount:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        reason:
+          minLength: 1
+          type: string
+        paymentMethod:
+          type: string
+          enum:
+          - CASH
+          - BANK_TRANSFER
+          - MOMO
+          - VNPAY
+          - INTERNAL_TRANSFER
+        referenceCode:
+          type: string
+    RecordDepositReceiptRequest:
+      required:
+      - amount
+      - contractId
+      type: object
+      properties:
+        contractId:
+          type: string
+          format: uuid
+        amount:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        paymentMethod:
+          type: string
+          enum:
+          - CASH
+          - BANK_TRANSFER
+          - MOMO
+          - VNPAY
+          - INTERNAL_TRANSFER
+        referenceCode:
+          type: string
+        note:
+          type: string
+    OffsetDepositToInvoiceRequest:
+      required:
+      - amount
+      - contractId
+      - invoiceId
+      type: object
+      properties:
+        contractId:
+          type: string
+          format: uuid
+        invoiceId:
+          type: string
+          format: uuid
+        amount:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        note:
+          type: string
+    DeductDepositRequest:
+      required:
+      - amount
+      - contractId
+      - reason
+      type: object
+      properties:
+        contractId:
+          type: string
+          format: uuid
+        amount:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        reason:
+          minLength: 1
+          type: string
+        expenseRef:
+          type: string
+    CorrectDepositReceiptRequest:
+      required:
+      - deltaAmount
+      - reason
+      - refEntryId
+      type: object
+      properties:
+        refEntryId:
+          type: string
+          format: uuid
+        deltaAmount:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        reason:
+          minLength: 1
+          type: string
+    CreateContractRequest:
+      required:
+      - actualStartDate
+      - depositRequired
+      - plannedEndExclusive
+      - rent
+      - representativeTenantId
+      - roomId
+      type: object
+      properties:
+        roomId:
+          type: string
+          format: uuid
+        representativeTenantId:
+          type: string
+          format: uuid
+        actualStartDate:
+          type: string
+          format: date
+        plannedEndExclusive:
+          type: string
+          format: date
+        rent:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        depositRequired:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+    ApiResponseContractSummary:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/ContractSummary"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
     ContractSummary:
       type: object
       properties:
-        id: { type: string, format: uuid }
-        roomId: { type: string, format: uuid }
-        representativeTenantId: { type: string, format: uuid }
-        representativeName: { type: string }
-        status: { type: string, enum: [DRAFT, ACTIVE, ENDED] }
-        actualStartDate: { type: string, format: date }
-        plannedEndExclusive: { type: string, format: date }
-        actualCheckoutDate: { type: string, format: date, nullable: true }
-        rent: { type: string, example: "3500000" }
-        depositRequired: { type: string, example: "3500000" }
-        depositHeld: { type: string, example: "3500000" }
-
-    CreateContractRequest:
+        id:
+          type: string
+          format: uuid
+        roomId:
+          type: string
+          format: uuid
+        roomNumber:
+          type: string
+        buildingId:
+          type: string
+          format: uuid
+        buildingName:
+          type: string
+        representativeTenantId:
+          type: string
+          format: uuid
+        representativeName:
+          type: string
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - ACTIVE
+          - ENDED
+        actualStartDate:
+          type: string
+          format: date
+        plannedEndExclusive:
+          type: string
+          format: date
+        actualCheckoutDate:
+          type: string
+          format: date
+        rent:
+          type: string
+        depositRequired:
+          type: string
+        depositHeld:
+          type: string
+    CreateSubscriptionRequest:
+      required:
+      - serviceId
+      - startMonth
       type: object
-      required: [roomId, representativeTenantId, actualStartDate, plannedEndExclusive, rent, depositRequired]
       properties:
-        roomId: { type: string, format: uuid }
-        representativeTenantId: { type: string, format: uuid }
-        actualStartDate: { type: string, format: date }
-        plannedEndExclusive: { type: string, format: date }
-        rent: { type: string, example: "3500000" }
-        depositRequired: { type: string, example: "3500000" }
-
-    ActivateContractRequest:
+        serviceId:
+          type: string
+          format: uuid
+        startMonth:
+          minLength: 1
+          pattern: "^\\d{4}-(0[1-9]|1[0-2])$"
+          type: string
+        endMonthExclusive:
+          type: string
+    ApiResponseSubscriptionResponse:
       type: object
-      required: [handoverReadings]
+      properties:
+        data:
+          $ref: "#/components/schemas/SubscriptionResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    SubscriptionResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        contractId:
+          type: string
+          format: uuid
+        serviceId:
+          type: string
+          format: uuid
+        serviceName:
+          type: string
+        serviceUnit:
+          type: string
+        startMonth:
+          type: string
+        endMonthExclusive:
+          type: string
+    CreateOneOffChargeRequest:
+      required:
+      - amount
+      - billingMonth
+      - label
+      - reason
+      type: object
+      properties:
+        billingMonth:
+          minLength: 1
+          pattern: "^\\d{4}-(0[1-9]|1[0-2])$"
+          type: string
+        label:
+          minLength: 1
+          type: string
+        amount:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        reason:
+          minLength: 1
+          type: string
+        sourceRef:
+          type: string
+    ApiResponseOneOffChargeResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/OneOffChargeResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    OneOffChargeResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        contractId:
+          type: string
+          format: uuid
+        billingMonth:
+          type: string
+        label:
+          type: string
+        amount:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        reason:
+          type: string
+        sourceRef:
+          type: string
+    AddMemberRequest:
+      required:
+      - joinedOn
+      - tenantId
+      type: object
+      properties:
+        tenantId:
+          type: string
+          format: uuid
+        joinedOn:
+          type: string
+          format: date
+    ApiResponseContractMemberResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/ContractMemberResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    ContractMemberResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        tenantId:
+          type: string
+          format: uuid
+        fullName:
+          type: string
+        phone:
+          type: string
+        citizenIdMasked:
+          type: string
+        joinedOn:
+          type: string
+          format: date
+        leftOn:
+          type: string
+          format: date
+        isRepresentative:
+          type: boolean
+    ExtendContractRequest:
+      required:
+      - newPlannedEndExclusive
+      - reason
+      type: object
+      properties:
+        newPlannedEndExclusive:
+          type: string
+          format: date
+        reason:
+          minLength: 1
+          type: string
+    CheckoutContractRequest:
+      required:
+      - actualCheckoutDate
+      type: object
+      properties:
+        actualCheckoutDate:
+          type: string
+          format: date
+        finalReadings:
+          type: array
+          items:
+            $ref: "#/components/schemas/HandoverReadingItem"
+    HandoverReadingItem:
+      required:
+      - readingDate
+      - value
+      type: object
+      properties:
+        meterId:
+          type: string
+          format: uuid
+        meterType:
+          type: string
+          enum:
+          - ELECTRICITY
+          - WATER
+        readingDate:
+          type: string
+          format: date
+        value:
+          type: number
+    ActivateContractRequest:
+      required:
+      - handoverReadings
+      type: object
       properties:
         handoverReadings:
           type: array
           items:
-            type: object
-            required: [meterId, readingDate, value]
-            properties:
-              meterId: { type: string, format: uuid }
-              readingDate: { type: string, format: date }
-              value: { type: string, example: "120.500" }
-
-    CheckoutContractRequest:
-      type: object
-      required: [actualCheckoutDate, finalReadings]
-      properties:
-        actualCheckoutDate: { type: string, format: date }
-        finalReadings:
-          type: array
-          items:
-            type: object
-            required: [meterId, readingDate, value]
-            properties:
-              meterId: { type: string, format: uuid }
-              readingDate: { type: string, format: date }
-              value: { type: string, example: "150.750" }
-
-    ContractDetailResponse:
-      type: object
-      properties:
-        data: { $ref: '#/components/schemas/ContractSummary' }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
-    ContractPageResponse:
-      type: object
-      properties:
-        data:
-          type: array
-          items: { $ref: '#/components/schemas/ContractSummary' }
-        meta: { $ref: '#/components/schemas/PageMeta' }
-
-    ContractMemberResponse:
-      type: object
-      properties:
-        id: { type: string, format: uuid }
-        tenantId: { type: string, format: uuid }
-        fullName: { type: string }
-        phone: { type: string }
-        joinedOn: { type: string, format: date }
-        leftOn: { type: string, format: date, nullable: true }
-        isRepresentative: { type: boolean }
-
-    ContractMemberListResponse:
-      type: object
-      properties:
-        data:
-          type: array
-          items: { $ref: '#/components/schemas/ContractMemberResponse' }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
-    AddMemberRequest:
-      type: object
-      required: [tenantId, joinedOn]
-      properties:
-        tenantId: { type: string, format: uuid }
-        joinedOn: { type: string, format: date }
-
-    # Tariffs, Meters, Readings
-    ServiceDetailResponse:
-      type: object
-      properties:
-        data:
-          type: object
-          properties:
-            id: { type: string, format: uuid }
-            name: { type: string }
-            unit: { type: string }
-            calculationType: { type: string, enum: [ROOM_MONTHLY, PERSON_MONTHLY, METERED, ONE_OFF] }
-            active: { type: boolean }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
-    CreateServiceRequest:
-      type: object
-      required: [name, unit, calculationType]
-      properties:
-        name: { type: string }
-        unit: { type: string }
-        calculationType: { type: string, enum: [ROOM_MONTHLY, PERSON_MONTHLY, METERED, ONE_OFF] }
-
-    ServiceListResponse:
-      type: object
-      properties:
-        data:
-          type: array
-          items:
-            type: object
-            properties:
-              id: { type: string, format: uuid }
-              name: { type: string }
-              unit: { type: string }
-              calculationType: { type: string }
-              active: { type: boolean }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
-    TariffDetailResponse:
-      type: object
-      properties:
-        data:
-          type: object
-          properties:
-            id: { type: string, format: uuid }
-            buildingId: { type: string, format: uuid }
-            serviceId: { type: string, format: uuid }
-            serviceName: { type: string }
-            effectiveMonth: { type: string, example: "2026-09" }
-            unitPrice: { type: string, example: "3500" }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
+            $ref: "#/components/schemas/HandoverReadingItem"
     CreateTariffRequest:
+      required:
+      - effectiveMonth
+      - serviceId
+      - unitPrice
       type: object
-      required: [serviceId, effectiveMonth, unitPrice]
       properties:
-        serviceId: { type: string, format: uuid }
-        effectiveMonth: { type: string, example: "2026-09" }
-        unitPrice: { type: string, example: "3500" }
-
-    TariffListResponse:
+        serviceId:
+          type: string
+          format: uuid
+        effectiveMonth:
+          minLength: 1
+          pattern: "^\\d{4}-(0[1-9]|1[0-2])$"
+          type: string
+        unitPrice:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+    ApiResponseTariffResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/TariffResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    TariffResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        buildingId:
+          type: string
+          format: uuid
+        serviceId:
+          type: string
+          format: uuid
+        serviceName:
+          type: string
+        serviceUnit:
+          type: string
+        calculationType:
+          type: string
+          enum:
+          - ROOM_MONTHLY
+          - PERSON_MONTHLY
+          - METERED
+          - ONE_OFF
+        effectiveMonth:
+          type: string
+        unitPrice:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+    FloorRequest:
+      required:
+      - name
+      type: object
+      properties:
+        name:
+          minLength: 1
+          type: string
+        floorOrder:
+          type: integer
+          format: int32
+    ApiResponseFloorResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/FloorResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    FloorResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        buildingId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        floorOrder:
+          type: integer
+          format: int32
+        createdAt:
+          type: string
+          format: date-time
+    ApiResponseAuthResponseData:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/AuthResponseData"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    AuthResponseData:
+      type: object
+      properties:
+        accessToken:
+          type: string
+        tokenType:
+          type: string
+        expiresIn:
+          type: integer
+          format: int64
+        refreshToken:
+          type: string
+        user:
+          $ref: "#/components/schemas/UserSummaryDto"
+    ActivateInviteRequest:
+      required:
+      - inviteCode
+      - password
+      type: object
+      properties:
+        inviteCode:
+          minLength: 1
+          type: string
+        password:
+          maxLength: 2147483647
+          minLength: 6
+          type: string
+    MobileRefreshRequest:
+      required:
+      - refreshToken
+      type: object
+      properties:
+        refreshToken:
+          minLength: 1
+          type: string
+    LoginRequest:
+      required:
+      - login
+      - password
+      type: object
+      properties:
+        login:
+          minLength: 1
+          type: string
+        password:
+          minLength: 1
+          type: string
+    ChangePasswordRequest:
+      required:
+      - newPassword
+      - oldPassword
+      type: object
+      properties:
+        oldPassword:
+          minLength: 1
+          type: string
+        newPassword:
+          maxLength: 2147483647
+          minLength: 6
+          type: string
+    RoomBookableRequest:
+      type: object
+      properties:
+        bookable:
+          type: boolean
+    ApiResponseVoid:
+      type: object
+      properties:
+        data:
+          type: object
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    ApiResponseListUserSummaryDto:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/UserSummaryDto"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    ApiResponseListUUID:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: string
+            format: uuid
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    Pageable:
+      type: object
+      properties:
+        page:
+          minimum: 0
+          type: integer
+          format: int32
+        size:
+          minimum: 1
+          type: integer
+          format: int32
+        sort:
+          type: array
+          items:
+            type: string
+    ApiResponseListTenantSummary:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/TenantSummary"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    ApiResponseListServiceDefinitionResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ServiceDefinitionResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    ApiResponseListRoomMeterResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoomMeterResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    RoomMeterResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        roomId:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum:
+          - ELECTRICITY
+          - WATER
+        serial:
+          type: string
+        installedOn:
+          type: string
+          format: date
+        initialReading:
+          type: string
+        active:
+          type: boolean
+    ApiResponseDashboardMetricsDto:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/DashboardMetricsDto"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    DashboardMetricsDto:
+      type: object
+      properties:
+        buildingId:
+          type: string
+          format: uuid
+        billingMonth:
+          type: string
+        billedAmount:
+          type: string
+        cashCollected:
+          type: string
+        cashRefunded:
+          type: string
+        netCash:
+          type: string
+        totalDebt:
+          type: string
+        totalCredit:
+          type: string
+        totalDepositHeld:
+          type: string
+        totalRooms:
+          type: integer
+          format: int32
+        occupiedRooms:
+          type: integer
+          format: int32
+        vacantBookableRooms:
+          type: integer
+          format: int32
+        vacantBlockedRooms:
+          type: integer
+          format: int32
+        openIssuesCount:
+          type: integer
+          format: int32
+    ApiResponsePageNotificationDto:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/PageNotificationDto"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    PageNotificationDto:
+      type: object
+      properties:
+        totalPages:
+          type: integer
+          format: int32
+        totalElements:
+          type: integer
+          format: int64
+        size:
+          type: integer
+          format: int32
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/NotificationDto"
+        number:
+          type: integer
+          format: int32
+        sort:
+          $ref: "#/components/schemas/SortObject"
+        pageable:
+          $ref: "#/components/schemas/PageableObject"
+        numberOfElements:
+          type: integer
+          format: int32
+        first:
+          type: boolean
+        last:
+          type: boolean
+        empty:
+          type: boolean
+    PageableObject:
+      type: object
+      properties:
+        offset:
+          type: integer
+          format: int64
+        paged:
+          type: boolean
+        pageNumber:
+          type: integer
+          format: int32
+        pageSize:
+          type: integer
+          format: int32
+        sort:
+          $ref: "#/components/schemas/SortObject"
+        unpaged:
+          type: boolean
+    SortObject:
+      type: object
+      properties:
+        empty:
+          type: boolean
+        sorted:
+          type: boolean
+        unsorted:
+          type: boolean
+    ApiResponseMapStringLong:
+      type: object
+      properties:
+        data:
+          type: object
+          additionalProperties:
+            type: integer
+            format: int64
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    ApiResponseListIssueDto:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/IssueDto"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    ApiResponsePageInvoiceSummaryResponse:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/PageInvoiceSummaryResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    InvoiceSummaryResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        contractId:
+          type: string
+          format: uuid
+        roomName:
+          type: string
+        buildingName:
+          type: string
+        tenantName:
+          type: string
+        billingMonth:
+          type: string
+        status:
+          type: string
+          enum:
+          - DRAFT
+          - ISSUED
+        effectiveDue:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        debt:
+          pattern: "^-?[0-9]{1,19}$"
+          type: string
+          example: "3000000"
+        paymentStatus:
+          type: string
+          enum:
+          - UNPAID
+          - PARTIAL
+          - PAID
+          - CREDIT
+        dueDate:
+          type: string
+          format: date
+    PageInvoiceSummaryResponse:
+      type: object
+      properties:
+        totalPages:
+          type: integer
+          format: int32
+        totalElements:
+          type: integer
+          format: int64
+        size:
+          type: integer
+          format: int32
+        content:
+          type: array
+          items:
+            $ref: "#/components/schemas/InvoiceSummaryResponse"
+        number:
+          type: integer
+          format: int32
+        sort:
+          $ref: "#/components/schemas/SortObject"
+        pageable:
+          $ref: "#/components/schemas/PageableObject"
+        numberOfElements:
+          type: integer
+          format: int32
+        first:
+          type: boolean
+        last:
+          type: boolean
+        empty:
+          type: boolean
+    ApiResponseListFeedbackDto:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/FeedbackDto"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    ApiResponseListContractSummary:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContractSummary"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    ApiResponseListSubscriptionResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/SubscriptionResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    ApiResponseListOneOffChargeResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/OneOffChargeResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    ApiResponseListContractMemberResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ContractMemberResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    ApiResponseListConsumptionAlertResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/ConsumptionAlertResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    ApiResponseListBuildingResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/BuildingResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    ApiResponseListTariffResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/TariffResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    ApiResponseListRoomResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/RoomResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    ApiResponseListFloorResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: "#/components/schemas/FloorResponse"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    ApiResponseUserProfileData:
+      type: object
+      properties:
+        data:
+          $ref: "#/components/schemas/UserProfileData"
+        meta:
+          type: object
+          additionalProperties:
+            type: object
+        success:
+          type: boolean
+    UserProfileData:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        login:
+          type: string
+        role:
+          type: string
+          enum:
+          - OWNER
+          - STAFF
+          - TENANT
+        fullName:
+          type: string
+        assignedBuildingIds:
+          type: array
+          items:
+            type: string
+            format: uuid
+    CsrfToken:
+      type: object
+      properties:
+        headerName:
+          type: string
+        token:
+          type: string
+        parameterName:
+          type: string
+    ApiResponseListMapStringObject:
       type: object
       properties:
         data:
           type: array
           items:
             type: object
-            properties:
-              id: { type: string, format: uuid }
-              serviceId: { type: string, format: uuid }
-              serviceName: { type: string }
-              effectiveMonth: { type: string }
-              unitPrice: { type: string }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
-    RoomMeterListResponse:
-      type: object
-      properties:
-        data:
-          type: array
-          items:
+            additionalProperties:
+              type: object
+        meta:
+          type: object
+          additionalProperties:
             type: object
-            properties:
-              id: { type: string, format: uuid }
-              type: { type: string, enum: [ELECTRICITY, WATER] }
-              serial: { type: string }
-              latestReading: { type: string, example: "150.750" }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
-    RecordMeterReadingRequest:
-      type: object
-      required: [readingDate, value, kind]
-      properties:
-        readingDate: { type: string, format: date }
-        value: { type: string, example: "150.750" }
-        kind: { type: string, enum: [HANDOVER, PERIOD_END, CHECKOUT] }
-        fileId: { type: string, format: uuid }
-
-    MeterReadingResponse:
-      type: object
-      properties:
-        data:
-          type: object
-          properties:
-            id: { type: string, format: uuid }
-            meterId: { type: string, format: uuid }
-            readingDate: { type: string, format: date }
-            value: { type: string }
-            kind: { type: string }
-            fileId: { type: string, format: uuid }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
-    MeterReadingListResponse:
-      type: object
-      properties:
-        data:
-          type: array
-          items:
-            type: object
-            properties:
-              id: { type: string, format: uuid }
-              readingDate: { type: string, format: date }
-              value: { type: string }
-              kind: { type: string }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
-    AlertDetailResponse:
-      type: object
-      properties:
-        data:
-          type: object
-          properties:
-            id: { type: string, format: uuid }
-            contractId: { type: string, format: uuid }
-            meterType: { type: string }
-            billingMonth: { type: string }
-            evaluationStatus: { type: string, enum: [NORMAL, WARNING, INSUFFICIENT_DATA, NOT_COMPARABLE] }
-            comparisonSnapshot: { type: object }
-            acknowledgedBy: { type: string, format: uuid, nullable: true }
-            reason: { type: string, nullable: true }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
-    AlertListResponse:
-      type: object
-      properties:
-        data:
-          type: array
-          items:
-            type: object
-            properties:
-              id: { type: string, format: uuid }
-              meterType: { type: string }
-              billingMonth: { type: string }
-              evaluationStatus: { type: string }
-              reason: { type: string }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
-    # Invoices & Items
-    InvoicePreviewRequest:
-      type: object
-      required: [contractId, billingMonth]
-      properties:
-        contractId: { type: string, format: uuid }
-        billingMonth: { type: string, example: "2026-09" }
-
-    AdjustInvoiceRequest:
-      type: object
-      required: [deltaAmount, reason, effectiveDate]
-      properties:
-        deltaAmount: { type: string, example: "-200000" }
-        reason: { type: string, example: "Giảm trừ tiền hỗ trợ dịch vụ" }
-        effectiveDate: { type: string, format: date }
-
-    InvoiceItemDetail:
-      type: object
-      properties:
-        id: { type: string, format: uuid }
-        type: { type: string }
-        label: { type: string }
-        quantity: { type: string }
-        unitPrice: { type: string }
-        amount: { type: string }
-        calculationSnapshot: { type: object }
-
-    InvoiceDetailResponse:
-      type: object
-      properties:
-        data:
-          type: object
-          properties:
-            id: { type: string, format: uuid }
-            contractId: { type: string, format: uuid }
-            billingMonth: { type: string }
-            status: { type: string, enum: [DRAFT, ISSUED] }
-            periodStart: { type: string, format: date }
-            periodEndExclusive: { type: string, format: date }
-            dueDate: { type: string, format: date }
-            issuedAt: { type: string, format: date-time, nullable: true }
-            originalTotal: { type: string, example: "3500000" }
-            adjustmentsTotal: { type: string, example: "-200000" }
-            effectiveDue: { type: string, example: "3300000" }
-            netApplied: { type: string, example: "3300000" }
-            debt: { type: string, example: "0" }
-            credit: { type: string, example: "0" }
-            paymentStatus: { type: string, enum: [UNPAID, PARTIAL, PAID, CREDIT] }
-            items:
-              type: array
-              items: { $ref: '#/components/schemas/InvoiceItemDetail' }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
-    InvoicePageResponse:
-      type: object
-      properties:
-        data:
-          type: array
-          items:
-            type: object
-            properties:
-              id: { type: string, format: uuid }
-              contractId: { type: string, format: uuid }
-              billingMonth: { type: string }
-              status: { type: string }
-              effectiveDue: { type: string }
-              debt: { type: string }
-              paymentStatus: { type: string }
-              dueDate: { type: string, format: date }
-        meta: { $ref: '#/components/schemas/PageMeta' }
-
-    # Finance & Ledgers
-    RecordPaymentRequest:
-      type: object
-      required: [amount, effectiveDate, paymentMethod]
-      properties:
-        amount: { type: string, example: "1500000" }
-        effectiveDate: { type: string, format: date }
-        paymentMethod: { type: string, example: "CASH" }
-        referenceCode: { type: string }
-        allowOverpay: { type: boolean, default: false }
-
-    CorrectPaymentRequest:
-      type: object
-      required: [deltaAmount, reason]
-      properties:
-        deltaAmount: { type: string, example: "-500000" }
-        reason: { type: string, example: "Nhập thừa 500k so với thực thu" }
-
-    RefundCreditRequest:
-      type: object
-      required: [amount, reason, effectiveDate]
-      properties:
-        amount: { type: string, example: "200000" }
-        reason: { type: string, example: "Hoàn tiền dư do giảm giá sau thu" }
-        effectiveDate: { type: string, format: date }
-
-    CreditTransferRequest:
-      type: object
-      required: [fromInvoiceId, toInvoiceId, amount, reason]
-      properties:
-        fromInvoiceId: { type: string, format: uuid }
-        toInvoiceId: { type: string, format: uuid }
-        amount: { type: string, example: "150000" }
-        reason: { type: string, example: "Chuyển dư tháng 8 bù nợ tháng 9" }
-
-    InvoiceLedgerEntryResponse:
-      type: object
-      properties:
-        data:
-          type: object
-          properties:
-            id: { type: string, format: uuid }
-            invoiceId: { type: string, format: uuid }
-            type: { type: string, enum: [PAYMENT, PAYMENT_CORRECTION, REFUND, CREDIT_OUT, CREDIT_IN, DEPOSIT_OFFSET_IN] }
-            signedAmount: { type: string }
-            effectiveDate: { type: string, format: date }
-            recordedAt: { type: string, format: date-time }
-            reason: { type: string }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
-    InvoiceLedgerResponse:
-      type: object
-      properties:
-        data:
-          type: array
-          items:
-            type: object
-            properties:
-              id: { type: string, format: uuid }
-              type: { type: string }
-              signedAmount: { type: string }
-              effectiveDate: { type: string, format: date }
-              recordedAt: { type: string, format: date-time }
-              reason: { type: string }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
-    # Deposits
-    ReceiveDepositRequest:
-      type: object
-      required: [amount, effectiveDate]
-      properties:
-        amount: { type: string, example: "3500000" }
-        effectiveDate: { type: string, format: date }
-        reason: { type: string, default: "Thu tiền cọc nhận phòng" }
-
-    RefundDepositRequest:
-      type: object
-      required: [amount, reason, effectiveDate]
-      properties:
-        amount: { type: string, example: "2500000" }
-        reason: { type: string, example: "Hoàn trả tiền cọc khi trả phòng" }
-        effectiveDate: { type: string, format: date }
-
-    DeductDepositRequest:
-      type: object
-      required: [amount, reason, effectiveDate]
-      properties:
-        amount: { type: string, example: "500000" }
-        reason: { type: string, example: "Khấu trừ sửa chữa vỡ kính cửa sổ" }
-        effectiveDate: { type: string, format: date }
-        sourceRef: { type: string }
-
-    OffsetDepositRequest:
-      type: object
-      required: [invoiceId, amount, reason]
-      properties:
-        invoiceId: { type: string, format: uuid }
-        amount: { type: string, example: "500000" }
-        reason: { type: string, example: "Bù trừ cọc trả nợ hóa đơn cuối kỳ" }
-
-    DepositLedgerEntryResponse:
-      type: object
-      properties:
-        data:
-          type: object
-          properties:
-            id: { type: string, format: uuid }
-            contractId: { type: string, format: uuid }
-            type: { type: string, enum: [RECEIPT, RECEIPT_CORRECTION, REFUND, DEDUCTION, OFFSET_OUT] }
-            signedAmount: { type: string }
-            effectiveDate: { type: string, format: date }
-            reason: { type: string }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
-    ContractDepositSummaryResponse:
-      type: object
-      properties:
-        data:
-          type: object
-          properties:
-            contractId: { type: string, format: uuid }
-            depositRequired: { type: string }
-            depositHeld: { type: string }
-            depositStatus: { type: string, enum: [NOT_RECEIVED, HOLDING, SETTLING, SETTLED] }
-            settlementAt: { type: string, format: date-time, nullable: true }
-            entries:
-              type: array
-              items:
-                type: object
-                properties:
-                  id: { type: string, format: uuid }
-                  type: { type: string }
-                  signedAmount: { type: string }
-                  effectiveDate: { type: string, format: date }
-                  reason: { type: string }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
-    # Maintenance & Feedback
-    CreateIssueRequest:
-      type: object
-      required: [contractId, roomId, title, description]
-      properties:
-        contractId: { type: string, format: uuid }
-        roomId: { type: string, format: uuid }
-        title: { type: string }
-        description: { type: string }
-        fileIds:
-          type: array
-          items: { type: string, format: uuid }
-
-    IssueDetailResponse:
-      type: object
-      properties:
-        data:
-          type: object
-          properties:
-            id: { type: string, format: uuid }
-            contractId: { type: string, format: uuid }
-            roomId: { type: string, format: uuid }
-            title: { type: string }
-            description: { type: string }
-            status: { type: string, enum: [OPEN, ACCEPTED, IN_PROGRESS, RESOLVED, CLOSED] }
-            assigneeId: { type: string, format: uuid, nullable: true }
-            fileIds:
-              type: array
-              items: { type: string, format: uuid }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
-    IssuePageResponse:
-      type: object
-      properties:
-        data:
-          type: array
-          items:
-            type: object
-            properties:
-              id: { type: string, format: uuid }
-              title: { type: string }
-              status: { type: string }
-              createdAt: { type: string, format: date-time }
-        meta: { $ref: '#/components/schemas/PageMeta' }
-
-    FeedbackDetailResponse:
-      type: object
-      properties:
-        data:
-          type: object
-          properties:
-            id: { type: string, format: uuid }
-            invoiceId: { type: string, format: uuid }
-            message: { type: string }
-            status: { type: string, enum: [OPEN, IN_REVIEW, RESOLVED] }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
-    FeedbackListResponse:
-      type: object
-      properties:
-        data:
-          type: array
-          items:
-            type: object
-            properties:
-              id: { type: string, format: uuid }
-              message: { type: string }
-              status: { type: string }
-              createdAt: { type: string, format: date-time }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
-    # Notifications & Dashboard
-    BroadcastNotificationRequest:
-      type: object
-      required: [buildingId, title, message]
-      properties:
-        buildingId: { type: string, format: uuid }
-        title: { type: string }
-        message: { type: string }
-
-    NotificationPageResponse:
-      type: object
-      properties:
-        data:
-          type: array
-          items:
-            type: object
-            properties:
-              id: { type: string, format: uuid }
-              title: { type: string }
-              message: { type: string }
-              readAt: { type: string, format: date-time, nullable: true }
-              createdAt: { type: string, format: date-time }
-        meta: { $ref: '#/components/schemas/PageMeta' }
-
-    DashboardMetricsResponse:
-      type: object
-      properties:
-        data:
-          type: object
-          properties:
-            buildingId: { type: string, format: uuid, nullable: true }
-            billingMonth: { type: string }
-            billedAmount: { type: string, example: "50000000" }
-            cashCollected: { type: string, example: "45000000" }
-            cashRefunded: { type: string, example: "500000" }
-            netCash: { type: string, example: "44500000" }
-            totalDebt: { type: string, example: "5000000" }
-            totalCredit: { type: string, example: "200000" }
-            totalDepositHeld: { type: string, example: "30000000" }
-            totalRooms: { type: integer }
-            occupiedRooms: { type: integer }
-            vacantBookableRooms: { type: integer }
-            vacantBlockedRooms: { type: integer }
-            openIssuesCount: { type: integer }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
-
-    StoredFileResponse:
-      type: object
-      properties:
-        data:
-          type: object
-          properties:
-            id: { type: string, format: uuid }
-            originalName: { type: string }
-            mimeType: { type: string }
-            size: { type: integer }
-        meta: { $ref: '#/components/schemas/ApiMeta' }
+        success:
+          type: boolean
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

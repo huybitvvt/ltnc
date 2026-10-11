@@ -1,0 +1,16 @@
+> trohub-web@1.0.0 build
+> tsc && vite build
+
+vite v6.4.3 building for production...
+transforming...
+✓ 1098 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                  0.68 kB │ gzip:   0.42 kB
+dist/assets/index-Rfqkswbi.js  783.95 kB │ gzip: 234.48 kB
+
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 10.04s

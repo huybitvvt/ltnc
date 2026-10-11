@@ -24,6 +24,9 @@ public class BillingDtos {
 
     public record AdjustInvoiceRequest(
             @NotNull(message = "Số tiền điều chỉnh không được để trống")
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal deltaAmount,
 
             @NotBlank(message = "Lý do điều chỉnh không được để trống")
@@ -46,7 +49,13 @@ public class BillingDtos {
             InvoiceItemType type,
             String label,
             BigDecimal quantity,
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal unitPrice,
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal amount,
             String calculationSnapshot,
             String readingRefs,
@@ -55,6 +64,9 @@ public class BillingDtos {
 
     public record InvoiceAdjustmentResponse(
             UUID id,
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal deltaAmount,
             String reason,
             LocalDate effectiveDate,
@@ -82,11 +94,29 @@ public class BillingDtos {
             LocalDate periodEndExclusive,
             LocalDate dueDate,
             Instant issuedAt,
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal originalTotal,
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal adjustmentsTotal,
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal effectiveDue,
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal netApplied,
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal debt,
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal credit,
             PaymentStatus paymentStatus,
             List<InvoiceItemResponse> items,
@@ -102,7 +132,13 @@ public class BillingDtos {
             String tenantName,
             String billingMonth,
             InvoiceStatus status,
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal effectiveDue,
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal debt,
             PaymentStatus paymentStatus,
             LocalDate dueDate

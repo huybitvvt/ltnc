@@ -34,6 +34,7 @@ public class ConsumptionAlert {
     @Column(name = "evaluation_status", nullable = false, length = 30)
     private EvaluationStatus evaluationStatus;
 
+    @org.hibernate.annotations.JdbcTypeCode(org.hibernate.type.SqlTypes.JSON)
     @Column(name = "comparison_snapshot", nullable = false, columnDefinition = "JSONB")
     private String comparisonSnapshot; // JSON string chứa snapshot so sánh
 

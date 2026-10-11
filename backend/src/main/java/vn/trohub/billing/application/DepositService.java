@@ -32,6 +32,9 @@ import java.util.*;
 
 @Service
 public class DepositService {
+    private java.time.Clock clock = java.time.Clock.system(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setClock(java.time.Clock clock) { this.clock = clock; }
 
     private static final Logger log = LoggerFactory.getLogger(DepositService.class);
 
@@ -65,7 +68,7 @@ public class DepositService {
         this.userRepository = userRepository;
         this.staffAssignmentRepository = staffAssignmentRepository;
         this.contractMemberRepository = contractMemberRepository;
-        this.objectMapper = objectMapper;
+        this.objectMapper = objectMapper.findAndRegisterModules();
     }
 
     @Transactional(readOnly = true)
@@ -85,13 +88,22 @@ public class DepositService {
     public ContractDepositFinancialStatusResponse recordDepositReceipt(RecordDepositReceiptRequest request,
                                                                        UserPrincipal principal,
                                                                        String idempotencyKey) {
-        Contract contract = contractRepository.findById(request.contractId())
+        if (principal.isTenant()) throw new AccessDeniedException("Chỉ quản lý được ghi giao dịch cọc");
+        if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 100)
+            throw new IllegalArgumentException("X-Idempotency-Key bắt buộc");
+        operationRepository.lockKey(principal.getId() + ":" + idempotencyKey);
+
+        Contract contract = contractRepository.findForUpdate(request.contractId())
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy hợp đồng: " + request.contractId()));
 
         User user = userRepository.findById(principal.getId())
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy người dùng"));
 
-        validateManagerOnly(contract.getRoom().getFloor().getBuilding().getId(), user);
+        validateManagerOnly(contract.getRoom().getBuilding().getId(), user);
+        String requestHash = hashObject("DEPOSIT_RECEIPT:" + request);
+        FinancialOperation op = checkOrStartOperation(idempotencyKey, requestHash, FinancialAction.DEPOSIT_RECEIPT, user);
+        if ("SUCCESS".equals(op.getStatus())) return readSnapshot(op);
+
 
         if (contract.getDepositStatus() == DepositStatus.SETTLED) {
             throw new IllegalStateException("Hợp đồng đã quyết toán cọc (SETTLED), không thể ghi nhận thêm phiếu thu (BR-121)");
@@ -99,15 +111,12 @@ public class DepositService {
         if (contract.getStatus() == ContractStatus.DRAFT) {
             throw new IllegalStateException("Hợp đồng còn ở trạng thái nháp (DRAFT), chưa kích hoạt");
         }
+        vn.trohub.common.money.Money.requireWhole(request.amount());
         if (request.amount().compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Số tiền thu cọc phải lớn hơn 0");
         }
 
-        String requestHash = hashObject(request);
-        FinancialOperation op = checkOrStartOperation(idempotencyKey, requestHash, FinancialAction.DEPOSIT_RECEIPT, user);
-        if (op != null && "SUCCESS".equals(op.getStatus())) {
-            return getContractDepositStatus(contract.getId(), principal);
-        }
+
 
         DepositLedgerEntry entry = new DepositLedgerEntry(
                 contract,
@@ -123,6 +132,7 @@ public class DepositService {
                 user
         );
         depositLedgerEntryRepository.save(entry);
+        depositLedgerEntryRepository.flush();
 
         if (contract.getDepositStatus() == DepositStatus.NOT_RECEIVED) {
             contract.setDepositStatus(DepositStatus.HOLDING);
@@ -134,21 +144,30 @@ public class DepositService {
             operationRepository.save(op);
         }
 
-        return buildStatusResponse(contract);
+        return finish(op, buildStatusResponse(contract));
     }
 
     @Transactional
     public ContractDepositFinancialStatusResponse correctDepositReceipt(CorrectDepositReceiptRequest request,
                                                                         UserPrincipal principal,
                                                                         String idempotencyKey) {
+        if (principal.isTenant()) throw new AccessDeniedException("Chỉ quản lý được ghi giao dịch cọc");
+        if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 100)
+            throw new IllegalArgumentException("X-Idempotency-Key bắt buộc");
+        operationRepository.lockKey(principal.getId() + ":" + idempotencyKey);
+
         DepositLedgerEntry refEntry = depositLedgerEntryRepository.findById(request.refEntryId())
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy bút toán cọc gốc: " + request.refEntryId()));
 
-        Contract contract = refEntry.getContract();
+        Contract contract = contractRepository.findForUpdate(refEntry.getContract().getId()).orElseThrow();
         User user = userRepository.findById(principal.getId())
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy người dùng"));
 
-        validateManagerOnly(contract.getRoom().getFloor().getBuilding().getId(), user);
+        validateManagerOnly(contract.getRoom().getBuilding().getId(), user);
+        String requestHash = hashObject("DEPOSIT_CORRECTION:" + request);
+        FinancialOperation op = checkOrStartOperation(idempotencyKey, requestHash, FinancialAction.DEPOSIT_CORRECTION, user);
+        if ("SUCCESS".equals(op.getStatus())) return readSnapshot(op);
+
 
         if (contract.getDepositStatus() == DepositStatus.SETTLED) {
             throw new IllegalStateException("Hợp đồng đã quyết toán cọc (SETTLED), không thể sửa bút toán (BR-121)");
@@ -156,21 +175,22 @@ public class DepositService {
         if (refEntry.getEntryType() != DepositEntryType.RECEIPT) {
             throw new IllegalArgumentException("Chỉ được sửa sai phiếu nhận cọc gốc (RECEIPT)");
         }
+        vn.trohub.common.money.Money.requireWhole(request.deltaAmount());
         if (request.deltaAmount().compareTo(BigDecimal.ZERO) == 0) {
             throw new IllegalArgumentException("Số tiền delta điều chỉnh phải khác 0");
         }
 
+        BigDecimal corrected = depositLedgerEntryRepository.findByContractIdOrderByRecordedAtAsc(contract.getId()).stream()
+                .filter(e -> e.getRefEntry() != null && e.getRefEntry().getId().equals(refEntry.getId()))
+                .map(DepositLedgerEntry::getAmount).reduce(refEntry.getAmount(), BigDecimal::add);
+        if (corrected.add(request.deltaAmount()).signum() < 0) throw new IllegalArgumentException("Phiếu thu sau đính chính không được âm");
         BigDecimal currentHeld = depositLedgerEntryRepository.sumAmountByContractId(contract.getId());
         BigDecimal newHeld = currentHeld.add(request.deltaAmount());
         if (newHeld.compareTo(BigDecimal.ZERO) < 0) {
             throw new IllegalArgumentException("Số tiền điều chỉnh làm số dư cọc đang giữ bị âm (sau điều chỉnh: " + newHeld + ")");
         }
 
-        String requestHash = hashObject(request);
-        FinancialOperation op = checkOrStartOperation(idempotencyKey, requestHash, FinancialAction.PAYMENT_CORRECTION, user);
-        if (op != null && "SUCCESS".equals(op.getStatus())) {
-            return getContractDepositStatus(contract.getId(), principal);
-        }
+
 
         DepositLedgerEntry correctionEntry = new DepositLedgerEntry(
                 contract,
@@ -185,7 +205,9 @@ public class DepositService {
                 op,
                 user
         );
+        correctionEntry.setEffectiveDate(refEntry.getEffectiveDate());
         depositLedgerEntryRepository.save(correctionEntry);
+        depositLedgerEntryRepository.flush();
 
         updateContractDepositStatusAfterBalanceChange(contract, newHeld);
 
@@ -194,38 +216,45 @@ public class DepositService {
             operationRepository.save(op);
         }
 
-        return buildStatusResponse(contract);
+        return finish(op, buildStatusResponse(contract));
     }
 
     @Transactional
     public ContractDepositFinancialStatusResponse refundDeposit(RefundDepositRequest request,
                                                                 UserPrincipal principal,
                                                                 String idempotencyKey) {
-        Contract contract = contractRepository.findById(request.contractId())
+        if (principal.isTenant()) throw new AccessDeniedException("Chỉ quản lý được ghi giao dịch cọc");
+        if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 100)
+            throw new IllegalArgumentException("X-Idempotency-Key bắt buộc");
+        operationRepository.lockKey(principal.getId() + ":" + idempotencyKey);
+
+        Contract contract = contractRepository.findForUpdate(request.contractId())
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy hợp đồng: " + request.contractId()));
 
         User user = userRepository.findById(principal.getId())
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy người dùng"));
 
-        validateManagerOnly(contract.getRoom().getFloor().getBuilding().getId(), user);
+        validateManagerOnly(contract.getRoom().getBuilding().getId(), user);
+        String requestHash = hashObject("DEPOSIT_REFUND:" + request);
+        FinancialOperation op = checkOrStartOperation(idempotencyKey, requestHash, FinancialAction.DEPOSIT_REFUND, user);
+        if ("SUCCESS".equals(op.getStatus())) return readSnapshot(op);
+
 
         if (contract.getDepositStatus() == DepositStatus.SETTLED) {
             throw new IllegalStateException("Hợp đồng đã quyết toán cọc (SETTLED), không thể hoàn cọc (BR-121)");
         }
+        vn.trohub.common.money.Money.requireWhole(request.amount());
         if (request.amount().compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Số tiền hoàn cọc phải lớn hơn 0");
         }
 
         BigDecimal currentHeld = depositLedgerEntryRepository.sumAmountByContractId(contract.getId());
+        vn.trohub.common.money.Money.requireWhole(request.amount());
         if (request.amount().compareTo(currentHeld) > 0) {
             throw new IllegalArgumentException("Số tiền hoàn (" + request.amount() + ") vượt quá số dư cọc đang giữ (" + currentHeld + ")");
         }
 
-        String requestHash = hashObject(request);
-        FinancialOperation op = checkOrStartOperation(idempotencyKey, requestHash, FinancialAction.REFUND, user);
-        if (op != null && "SUCCESS".equals(op.getStatus())) {
-            return getContractDepositStatus(contract.getId(), principal);
-        }
+
 
         DepositLedgerEntry entry = new DepositLedgerEntry(
                 contract,
@@ -241,6 +270,7 @@ public class DepositService {
                 user
         );
         depositLedgerEntryRepository.save(entry);
+        depositLedgerEntryRepository.flush();
 
         BigDecimal newHeld = currentHeld.subtract(request.amount());
         updateContractDepositStatusAfterBalanceChange(contract, newHeld);
@@ -250,38 +280,45 @@ public class DepositService {
             operationRepository.save(op);
         }
 
-        return buildStatusResponse(contract);
+        return finish(op, buildStatusResponse(contract));
     }
 
     @Transactional
     public ContractDepositFinancialStatusResponse deductDeposit(DeductDepositRequest request,
                                                                 UserPrincipal principal,
                                                                 String idempotencyKey) {
-        Contract contract = contractRepository.findById(request.contractId())
+        if (principal.isTenant()) throw new AccessDeniedException("Chỉ quản lý được ghi giao dịch cọc");
+        if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 100)
+            throw new IllegalArgumentException("X-Idempotency-Key bắt buộc");
+        operationRepository.lockKey(principal.getId() + ":" + idempotencyKey);
+
+        Contract contract = contractRepository.findForUpdate(request.contractId())
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy hợp đồng: " + request.contractId()));
 
         User user = userRepository.findById(principal.getId())
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy người dùng"));
 
-        validateManagerOnly(contract.getRoom().getFloor().getBuilding().getId(), user);
+        validateManagerOnly(contract.getRoom().getBuilding().getId(), user);
+        String requestHash = hashObject("DEPOSIT_DEDUCTION:" + request);
+        FinancialOperation op = checkOrStartOperation(idempotencyKey, requestHash, FinancialAction.DEPOSIT_DEDUCTION, user);
+        if ("SUCCESS".equals(op.getStatus())) return readSnapshot(op);
+
 
         if (contract.getDepositStatus() == DepositStatus.SETTLED) {
             throw new IllegalStateException("Hợp đồng đã quyết toán cọc (SETTLED), không thể khấu trừ (BR-121)");
         }
+        vn.trohub.common.money.Money.requireWhole(request.amount());
         if (request.amount().compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Số tiền khấu trừ cọc phải lớn hơn 0");
         }
 
         BigDecimal currentHeld = depositLedgerEntryRepository.sumAmountByContractId(contract.getId());
+        vn.trohub.common.money.Money.requireWhole(request.amount());
         if (request.amount().compareTo(currentHeld) > 0) {
             throw new IllegalArgumentException("Số tiền khấu trừ (" + request.amount() + ") vượt quá số dư cọc đang giữ (" + currentHeld + ")");
         }
 
-        String requestHash = hashObject(request);
-        FinancialOperation op = checkOrStartOperation(idempotencyKey, requestHash, FinancialAction.DEPOSIT_DEDUCTION, user);
-        if (op != null && "SUCCESS".equals(op.getStatus())) {
-            return getContractDepositStatus(contract.getId(), principal);
-        }
+
 
         DepositLedgerEntry entry = new DepositLedgerEntry(
                 contract,
@@ -297,6 +334,7 @@ public class DepositService {
                 user
         );
         depositLedgerEntryRepository.save(entry);
+        depositLedgerEntryRepository.flush();
 
         BigDecimal newHeld = currentHeld.subtract(request.amount());
         updateContractDepositStatusAfterBalanceChange(contract, newHeld);
@@ -306,23 +344,32 @@ public class DepositService {
             operationRepository.save(op);
         }
 
-        return buildStatusResponse(contract);
+        return finish(op, buildStatusResponse(contract));
     }
 
     @Transactional
     public ContractDepositFinancialStatusResponse offsetDepositToInvoice(OffsetDepositToInvoiceRequest request,
                                                                          UserPrincipal principal,
                                                                          String idempotencyKey) {
-        Contract contract = contractRepository.findById(request.contractId())
+        if (principal.isTenant()) throw new AccessDeniedException("Chỉ quản lý được ghi giao dịch cọc");
+        if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 100)
+            throw new IllegalArgumentException("X-Idempotency-Key bắt buộc");
+        operationRepository.lockKey(principal.getId() + ":" + idempotencyKey);
+
+        Contract contract = contractRepository.findForUpdate(request.contractId())
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy hợp đồng: " + request.contractId()));
 
-        Invoice invoice = invoiceRepository.findById(request.invoiceId())
+        Invoice invoice = invoiceRepository.findForUpdate(request.invoiceId())
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy hóa đơn: " + request.invoiceId()));
 
         User user = userRepository.findById(principal.getId())
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy người dùng"));
 
-        validateManagerOnly(contract.getRoom().getFloor().getBuilding().getId(), user);
+        validateManagerOnly(contract.getRoom().getBuilding().getId(), user);
+        String requestHash = hashObject("DEPOSIT_OFFSET:" + request);
+        FinancialOperation op = checkOrStartOperation(idempotencyKey, requestHash, FinancialAction.DEPOSIT_OFFSET, user);
+        if ("SUCCESS".equals(op.getStatus())) return readSnapshot(op);
+
 
         if (!invoice.getContract().getId().equals(contract.getId())) {
             throw new IllegalArgumentException("Chỉ được bù cọc cho hóa đơn thuộc chính hợp đồng đó (BR-115)");
@@ -333,11 +380,13 @@ public class DepositService {
         if (contract.getDepositStatus() == DepositStatus.SETTLED) {
             throw new IllegalStateException("Hợp đồng đã quyết toán cọc (SETTLED), không thể bù cọc");
         }
+        vn.trohub.common.money.Money.requireWhole(request.amount());
         if (request.amount().compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Số tiền bù cọc phải lớn hơn 0");
         }
 
         BigDecimal currentHeld = depositLedgerEntryRepository.sumAmountByContractId(contract.getId());
+        vn.trohub.common.money.Money.requireWhole(request.amount());
         if (request.amount().compareTo(currentHeld) > 0) {
             throw new IllegalArgumentException("Số tiền bù cọc (" + request.amount() + ") vượt quá số dư cọc đang giữ (" + currentHeld + ")");
         }
@@ -346,15 +395,12 @@ public class DepositService {
         BigDecimal netApplied = invoiceLedgerEntryRepository.sumAmountByInvoiceId(invoice.getId());
         BigDecimal invoiceDebt = effectiveDue.subtract(netApplied).max(BigDecimal.ZERO);
 
+        vn.trohub.common.money.Money.requireWhole(request.amount());
         if (request.amount().compareTo(invoiceDebt) > 0) {
             throw new IllegalArgumentException("Số tiền bù cọc (" + request.amount() + ") vượt quá số nợ của hóa đơn (" + invoiceDebt + ")");
         }
 
-        String requestHash = hashObject(request);
-        FinancialOperation op = checkOrStartOperation(idempotencyKey, requestHash, FinancialAction.DEPOSIT_OFFSET, user);
-        if (op != null && "SUCCESS".equals(op.getStatus())) {
-            return getContractDepositStatus(contract.getId(), principal);
-        }
+
 
         DepositLedgerEntry depositEntry = new DepositLedgerEntry(
                 contract,
@@ -393,20 +439,29 @@ public class DepositService {
             operationRepository.save(op);
         }
 
-        return buildStatusResponse(contract);
+        return finish(op, buildStatusResponse(contract));
     }
 
     @Transactional
     public ContractDepositFinancialStatusResponse settleDeposit(SettleDepositRequest request,
                                                                 UserPrincipal principal,
                                                                 String idempotencyKey) {
-        Contract contract = contractRepository.findById(request.contractId())
+        if (principal.isTenant()) throw new AccessDeniedException("Chỉ quản lý được ghi giao dịch cọc");
+        if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 100)
+            throw new IllegalArgumentException("X-Idempotency-Key bắt buộc");
+        operationRepository.lockKey(principal.getId() + ":" + idempotencyKey);
+
+        Contract contract = contractRepository.findForUpdate(request.contractId())
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy hợp đồng: " + request.contractId()));
 
         User user = userRepository.findById(principal.getId())
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy người dùng"));
 
-        validateManagerOnly(contract.getRoom().getFloor().getBuilding().getId(), user);
+        validateManagerOnly(contract.getRoom().getBuilding().getId(), user);
+        String requestHash = hashObject("DEPOSIT_SETTLE:" + request);
+        FinancialOperation op = checkOrStartOperation(idempotencyKey, requestHash, FinancialAction.DEPOSIT_SETTLE, user);
+        if ("SUCCESS".equals(op.getStatus())) return readSnapshot(op);
+
 
         if (contract.getStatus() != ContractStatus.ENDED) {
             throw new IllegalStateException("Chỉ được xác nhận quyết toán cọc khi hợp đồng đã kết thúc (ENDED) (BR-120)");
@@ -417,14 +472,10 @@ public class DepositService {
             throw new IllegalStateException("Chỉ được xác nhận quyết toán cọc khi số dư cọc đang giữ bằng 0 (hiện tại còn: " + currentHeld + ") (BR-120)");
         }
 
-        String requestHash = hashObject(request);
-        FinancialOperation op = checkOrStartOperation(idempotencyKey, requestHash, FinancialAction.DEPOSIT_DEDUCTION, user);
-        if (op != null && "SUCCESS".equals(op.getStatus())) {
-            return getContractDepositStatus(contract.getId(), principal);
-        }
+
 
         contract.setDepositStatus(DepositStatus.SETTLED);
-        contract.setDepositSettledAt(Instant.now());
+        contract.setDepositSettledAt(clock.instant());
         contractRepository.save(contract);
 
         if (op != null) {
@@ -432,7 +483,7 @@ public class DepositService {
             operationRepository.save(op);
         }
 
-        return buildStatusResponse(contract);
+        return finish(op, buildStatusResponse(contract));
     }
 
     private void updateContractDepositStatusAfterBalanceChange(Contract contract, BigDecimal newHeld) {
@@ -487,8 +538,8 @@ public class DepositService {
         return new ContractDepositFinancialStatusResponse(
                 contract.getId(),
                 contract.getRoom() != null ? contract.getRoom().getRoomNumber() : "",
-                contract.getRoom() != null && contract.getRoom().getFloor() != null && contract.getRoom().getFloor().getBuilding() != null
-                        ? contract.getRoom().getFloor().getBuilding().getName() : "",
+                contract.getRoom() != null && contract.getRoom().getFloor() != null && contract.getRoom().getBuilding() != null
+                        ? contract.getRoom().getBuilding().getName() : "",
                 contract.getRepresentativeTenant() != null ? contract.getRepresentativeTenant().getFullName() : "",
                 depositRequired.toPlainString(),
                 depositHeld.toPlainString(),
@@ -527,7 +578,7 @@ public class DepositService {
             return;
         }
         if (user.getRole() == UserRole.STAFF) {
-            validateManagerOnly(contract.getRoom().getFloor().getBuilding().getId(), user);
+            validateManagerOnly(contract.getRoom().getBuilding().getId(), user);
             return;
         }
         // Tenant
@@ -536,24 +587,34 @@ public class DepositService {
                 contract.getRepresentativeTenant().getUser().getId().equals(user.getId());
         boolean isMember = contractMemberRepository.findByContractIdOrderByJoinedOnAsc(contract.getId()).stream()
                 .anyMatch(m -> m.getTenant() != null && m.getTenant().getUser() != null && m.getTenant().getUser().getId().equals(user.getId()));
-        if (!isRep && !isMember) {
+        if (!isRep) {
             throw new AccessDeniedException("Người thuê không có quyền xem thông tin tiền cọc hợp đồng này");
         }
     }
 
     private FinancialOperation checkOrStartOperation(String key, String hash, FinancialAction action, User actor) {
         if (key == null || key.isBlank()) return null;
-        Optional<FinancialOperation> existing = operationRepository.findByIdempotencyKey(key);
+        Optional<FinancialOperation> existing = operationRepository.findByActorIdAndIdempotencyKey(actor.getId(), key);
         if (existing.isPresent()) {
             FinancialOperation op = existing.get();
             if (!op.getRequestHash().equals(hash)) {
-                throw new IllegalArgumentException("Idempotency-Key xung đột với dữ liệu yêu cầu khác trước đó");
+                throw new vn.trohub.common.api.ConflictException("Idempotency-Key xung đột với dữ liệu yêu cầu khác trước đó");
             }
             log.info("Deposit Idempotency match for key={}", key);
             return op;
         }
         FinancialOperation op = new FinancialOperation(key, actor, action, hash, "PENDING", "{}");
         return operationRepository.save(op);
+    }
+
+    private ContractDepositFinancialStatusResponse readSnapshot(FinancialOperation op) {
+        try { return objectMapper.readValue(op.getResponseSnapshot(), ContractDepositFinancialStatusResponse.class); }
+        catch (Exception ex) { throw new IllegalStateException("Không đọc được kết quả giao dịch cọc", ex); }
+    }
+    private ContractDepositFinancialStatusResponse finish(FinancialOperation op, ContractDepositFinancialStatusResponse result) {
+        try { op.setResponseSnapshot(objectMapper.writeValueAsString(result)); }
+        catch (Exception ex) { throw new IllegalStateException("Không lưu được kết quả giao dịch cọc", ex); }
+        op.setStatus("SUCCESS"); operationRepository.save(op); return result;
     }
 
     private String hashObject(Object obj) {

@@ -2,12 +2,14 @@ import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { Text, TextInput, Button, HelperText, Surface, useTheme } from 'react-native-paper';
 import { useMobileAuth } from './AuthContext';
+import { mobileApiClient } from './mobileClient';
 
 interface ActivateScreenProps {
   onNavigateToLogin: () => void;
+  reset?: boolean;
 }
 
-export const ActivateScreen: React.FC<ActivateScreenProps> = ({ onNavigateToLogin }) => {
+export const ActivateScreen: React.FC<ActivateScreenProps> = ({ onNavigateToLogin, reset = false }) => {
   const theme = useTheme();
   const { activate } = useMobileAuth();
 
@@ -36,8 +38,9 @@ export const ActivateScreen: React.FC<ActivateScreenProps> = ({ onNavigateToLogi
     setError(null);
     setLoading(true);
     try {
-      await activate(inviteCode.trim().toUpperCase(), password);
-      setSuccessMsg('Kích hoạt tài khoản thành công! Vui lòng quay lại đăng nhập.');
+      if (reset) await mobileApiClient.post('/auth/reset-password', { inviteCode: inviteCode.trim().toUpperCase(), password });
+      else await activate(inviteCode.trim().toUpperCase(), password);
+      setSuccessMsg('Mật khẩu đã được lưu. Vui lòng quay lại đăng nhập.');
     } catch (err: any) {
       const msg = err.response?.data?.error?.message || err.message || 'Kích hoạt thất bại';
       setError(msg);
@@ -54,7 +57,7 @@ export const ActivateScreen: React.FC<ActivateScreenProps> = ({ onNavigateToLogi
       <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <View style={styles.headerContainer}>
           <Text variant="headlineMedium" style={[styles.brandTitle, { color: theme.colors.primary }]}>
-            Kích hoạt tài khoản
+            {reset ? 'Đặt lại mật khẩu' : 'Kích hoạt tài khoản'}
           </Text>
           <Text variant="bodyMedium" style={styles.brandSubtitle}>
             Nhập mã mời được quản lý cấp (hiệu lực trong 24 giờ)
@@ -131,7 +134,7 @@ export const ActivateScreen: React.FC<ActivateScreenProps> = ({ onNavigateToLogi
             style={styles.activateButton}
             contentStyle={styles.buttonContent}
           >
-            Kích hoạt ngay
+            {reset ? 'Đặt lại mật khẩu' : 'Kích hoạt ngay'}
           </Button>
 
           <Button mode="text" onPress={onNavigateToLogin} disabled={loading} style={styles.backButton}>

@@ -1,540 +1,911 @@
-# Thiết kế Cơ sở Dữ liệu & ERD (docs/ERD.md)
+# Schema thực tế TroHub
 
-Tài liệu này xác định chi tiết cấu trúc bảng, kiểu dữ liệu, khóa chính, khóa ngoại, ràng buộc tính duy nhất, mô hình sổ cái (Ledger), và ánh xạ quy tắc nghiệp vụ (BR) cho cơ sở dữ liệu PostgreSQL 16 của TroHub.
+Sinh từ PostgreSQL sau Flyway V001–V017, ngày 11/10/2026. 34 bảng nghiệp vụ. Constraint database bên dưới là dữ liệu thực; quyền, giới hạn số dư và quy trình trạng thái còn được kiểm tra trong service.
 
----
+Tiền: `numeric(19,0)`; chỉ số: `numeric(18,3)`; ngày nghiệp vụ: `date`; timestamp: UTC (`timestamp with time zone`).
 
-## 1. Quy ước kiểu dữ liệu và chuẩn thiết kế
+Bút toán tài chính append-only được trigger bảo vệ. `operation_id` liên kết hai vế CREDIT_OUT/CREDIT_IN hoặc OFFSET_OUT/DEPOSIT_OFFSET. Bản ghi CREDIT_APPLIED cũ được giữ nguyên. `ref_entry_id` trỏ bản ghi gốc của correction. `(actor_id,idempotency_key)` duy nhất; `response_snapshot` lưu kết quả gửi lại.
 
-1. **Khóa chính (PK)**: Mọi bảng sử dụng `id UUID DEFAULT gen_random_uuid() PRIMARY KEY`.
-2. **Tiền tệ**: Mọi trường tiền tệ sử dụng kiểu `numeric(19,0)`, không có phần thập phân (VND), không âm trừ khi là trường `signed_amount` hoặc `delta_amount`. Tuyệt đối không dùng `float` hay `double` (BR-005, BR-007).
-3. **Số lượng & Chỉ số**: Mọi trường chỉ số điện, nước, sản lượng sử dụng `numeric(18,3)` (BR-008).
-4. **Thời gian**:
-   - Ngày nghiệp vụ: `date` (`LocalDate` theo múi giờ `Asia/Ho_Chi_Minh`) (BR-009).
-   - Thời điểm thực thi/audit: `timestamptz` (lưu UTC, hiển thị theo múi giờ địa phương) (BR-009).
-5. **Khoảng ngày nghiệp vụ**: Nửa mở `[startDate, endDateExclusive)` — ngày kết thúc không tính tiền (BR-036, BR-045).
-6. **Khóa lạc quan (Optimistic Locking)**: Các bảng có khả năng cập nhật trạng thái đồng thời đều có cột `version BIGINT NOT NULL DEFAULT 0`.
-7. **Khóa ngoại (FK)**: Dùng `ON DELETE RESTRICT` để ngăn xóa cứng các bản ghi đã có lịch sử tham chiếu (BR-010).
+V015 chặn một expense reference xuất hiện đồng thời ở one_off_charges.source_ref và deposit_ledger_entries.note. V017 giới hạn hồ sơ chưa gắn hợp đồng theo người tạo; hồ sơ gắn hợp đồng dùng phạm vi tòa được giao.
 
----
+## audit_events
 
-## 2. Danh mục Bảng chi tiết
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `actor_id` | `uuid` | Có |
+| `actor_role` | `character varying(20)` | Có |
+| `action` | `character varying(50)` | Có |
+| `resource_type` | `character varying(50)` | Có |
+| `resource_id` | `uuid` | Có |
+| `building_id` | `uuid` | Có |
+| `reason` | `text` |  |
+| `before_data` | `jsonb` |  |
+| `after_data` | `jsonb` | Có |
+| `source_ref` | `uuid` |  |
+| `recorded_at` | `timestamp with time zone` | Có |
 
-### 2.1. Module Identity & Authentication
+- `audit_events_action_not_null`: `NOT NULL action`
+- `audit_events_actor_id_fkey`: `FOREIGN KEY (actor_id) REFERENCES users(id) ON DELETE RESTRICT`
+- `audit_events_actor_id_not_null`: `NOT NULL actor_id`
+- `audit_events_actor_role_not_null`: `NOT NULL actor_role`
+- `audit_events_after_data_not_null`: `NOT NULL after_data`
+- `audit_events_building_id_fkey`: `FOREIGN KEY (building_id) REFERENCES buildings(id) ON DELETE RESTRICT`
+- `audit_events_building_id_not_null`: `NOT NULL building_id`
+- `audit_events_id_not_null`: `NOT NULL id`
+- `audit_events_pkey`: `PRIMARY KEY (id)`
+- `audit_events_recorded_at_not_null`: `NOT NULL recorded_at`
+- `audit_events_resource_id_not_null`: `NOT NULL resource_id`
+- `audit_events_resource_type_not_null`: `NOT NULL resource_type`
 
-#### Bảng `users` (Tài khoản người dùng)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK, DEFAULT gen_random_uuid() | Định danh người dùng |
-| `login` | VARCHAR(50) | NOT NULL, UNIQUE | Tên đăng nhập (hoặc số điện thoại) |
-| `password_hash`| VARCHAR(255) | NOT NULL | Mật khẩu băm BCrypt |
-| `role` | VARCHAR(20) | NOT NULL | `OWNER`, `STAFF`, `TENANT` (BR-002) |
-| `enabled` | BOOLEAN | NOT NULL DEFAULT true | Trạng thái kích hoạt (BR-025) |
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm tạo |
-| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm cập nhật |
-| `version` | BIGINT | NOT NULL DEFAULT 0 | Khóa lạc quan |
+## auth_sessions
 
-#### Bảng `building_staff_assignments` (Phân công quản lý tòa nhà)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | Định danh bản ghi phân công |
-| `user_id` | UUID | NOT NULL, FK -> users(id) RESTRICT | Nhân viên được giao (role STAFF) |
-| `building_id` | UUID | NOT NULL, FK -> buildings(id) RESTRICT| Tòa nhà được phân công (BR-013) |
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm phân công |
-*Ràng buộc duy nhất*: `CONSTRAINT uq_staff_building UNIQUE (user_id, building_id)`
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `user_id` | `uuid` | Có |
+| `family_id` | `uuid` | Có |
+| `expires_at` | `timestamp with time zone` | Có |
+| `revoked_at` | `timestamp with time zone` |  |
+| `created_at` | `timestamp with time zone` | Có |
 
-#### Bảng `invites` (Mã mời kích hoạt & Đặt lại mật khẩu)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | Định danh lời mời |
-| `user_id` | UUID | NOT NULL, FK -> users(id) RESTRICT | Tài khoản được mời |
-| `code_hash` | VARCHAR(255) | NOT NULL | Hash của mã ngẫu nhiên (BR-016) |
-| `purpose` | VARCHAR(30) | NOT NULL | `TENANT_INVITE`, `PASSWORD_RESET` |
-| `expires_at` | TIMESTAMPTZ | NOT NULL | Hạn sử dụng (24 giờ) (BR-016) |
-| `consumed_at`| TIMESTAMPTZ | NULL | Thời điểm đã kích hoạt |
-| `created_by` | UUID | NOT NULL, FK -> users(id) RESTRICT | Quản lý tạo mã mời |
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm tạo |
+- `auth_sessions_created_at_not_null`: `NOT NULL created_at`
+- `auth_sessions_expires_at_not_null`: `NOT NULL expires_at`
+- `auth_sessions_family_id_not_null`: `NOT NULL family_id`
+- `auth_sessions_id_not_null`: `NOT NULL id`
+- `auth_sessions_pkey`: `PRIMARY KEY (id)`
+- `auth_sessions_user_id_fkey`: `FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT`
+- `auth_sessions_user_id_not_null`: `NOT NULL user_id`
 
-#### Bảng `auth_sessions` (Phiên làm việc & Token Family)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | Session ID |
-| `user_id` | UUID | NOT NULL, FK -> users(id) RESTRICT | Chủ tài khoản |
-| `family_id` | UUID | NOT NULL | Token Family ID (phát hiện tái sử dụng)|
-| `expires_at` | TIMESTAMPTZ | NOT NULL | Thời hạn tuyệt đối (7 ngày) |
-| `revoked_at` | TIMESTAMPTZ | NULL | Thời điểm thu hồi phiên |
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm bắt đầu phiên |
+## building_billing_settings
 
-#### Bảng `refresh_tokens` (Lịch sử xoay vòng Refresh Token)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | Token record ID |
-| `session_id` | UUID | NOT NULL, FK -> auth_sessions(id) RESTRICT | Phiên làm việc |
-| `token_hash` | VARCHAR(255) | NOT NULL | Hash của refresh token opaque |
-| `issued_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm cấp |
-| `used_at` | TIMESTAMPTZ | NULL | Thời điểm đã xoay vòng |
-| `replaced_by_id`| UUID | NULL, FK -> refresh_tokens(id) RESTRICT | Token thay thế |
-| `expires_at` | TIMESTAMPTZ | NOT NULL | Hạn của token này |
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `building_id` | `uuid` | Có |
+| `due_days` | `integer` | Có |
+| `water_absolute_threshold` | `numeric(18,3)` | Có |
+| `electricity_absolute_threshold` | `numeric(18,3)` | Có |
+| `created_at` | `timestamp with time zone` | Có |
+| `updated_at` | `timestamp with time zone` | Có |
+| `version` | `bigint` | Có |
 
----
+- `building_billing_settings_building_id_fkey`: `FOREIGN KEY (building_id) REFERENCES buildings(id) ON DELETE RESTRICT`
+- `building_billing_settings_building_id_key`: `UNIQUE (building_id)`
+- `building_billing_settings_building_id_not_null`: `NOT NULL building_id`
+- `building_billing_settings_created_at_not_null`: `NOT NULL created_at`
+- `building_billing_settings_due_days_not_null`: `NOT NULL due_days`
+- `building_billing_settings_electricity_absolute_thresho_not_null`: `NOT NULL electricity_absolute_threshold`
+- `building_billing_settings_id_not_null`: `NOT NULL id`
+- `building_billing_settings_pkey`: `PRIMARY KEY (id)`
+- `building_billing_settings_updated_at_not_null`: `NOT NULL updated_at`
+- `building_billing_settings_version_not_null`: `NOT NULL version`
+- `building_billing_settings_water_absolute_threshold_not_null`: `NOT NULL water_absolute_threshold`
 
-### 2.2. Module Property & Billing Settings
+## building_staff_assignments
 
-#### Bảng `buildings` (Tòa nhà / Khu trọ)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | Định danh tòa nhà |
-| `name` | VARCHAR(100) | NOT NULL | Tên tòa nhà |
-| `address` | VARCHAR(255) | NOT NULL | Địa chỉ tòa nhà |
-| `active` | BOOLEAN | NOT NULL DEFAULT true | Trạng thái hoạt động (BR-010) |
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm tạo |
-| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm cập nhật |
-| `version` | BIGINT | NOT NULL DEFAULT 0 | Khóa lạc quan |
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `user_id` | `uuid` | Có |
+| `building_id` | `uuid` | Có |
+| `created_at` | `timestamp with time zone` | Có |
 
-#### Bảng `building_billing_settings` (Cấu hình hạn và ngưỡng cảnh báo tòa)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | ID cấu hình |
-| `building_id` | UUID | NOT NULL, UNIQUE, FK -> buildings(id) RESTRICT | Tòa nhà áp dụng |
-| `due_days` | INT | NOT NULL DEFAULT 7 | Số ngày thanh toán (mặc định 7) (BR-086)|
-| `water_absolute_threshold` | NUMERIC(18,3) | NOT NULL DEFAULT 10.000 | Ngưỡng vượt nước tuyệt đối (m³) (BR-142)|
-| `electricity_absolute_threshold`| NUMERIC(18,3) | NOT NULL DEFAULT 100.000 | Ngưỡng vượt điện tuyệt đối (kWh) (BR-142)|
-| `version` | BIGINT | NOT NULL DEFAULT 0 | Khóa lạc quan |
+- `building_staff_assignments_building_id_fkey`: `FOREIGN KEY (building_id) REFERENCES buildings(id) ON DELETE RESTRICT`
+- `building_staff_assignments_building_id_not_null`: `NOT NULL building_id`
+- `building_staff_assignments_created_at_not_null`: `NOT NULL created_at`
+- `building_staff_assignments_id_not_null`: `NOT NULL id`
+- `building_staff_assignments_pkey`: `PRIMARY KEY (id)`
+- `building_staff_assignments_user_id_fkey`: `FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT`
+- `building_staff_assignments_user_id_not_null`: `NOT NULL user_id`
+- `uq_staff_building`: `UNIQUE (user_id, building_id)`
 
-#### Bảng `floors` (Tầng)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | Định danh tầng |
-| `building_id` | UUID | NOT NULL, FK -> buildings(id) RESTRICT | Tòa nhà cha |
-| `label` | VARCHAR(50) | NOT NULL | Tên tầng (Tầng 1, Tầng 2, ...) |
-| `sort_order` | INT | NOT NULL DEFAULT 1 | Thứ tự hiển thị |
-| `active` | BOOLEAN | NOT NULL DEFAULT true | Trạng thái hoạt động |
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm tạo |
-| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm cập nhật |
-| `version` | BIGINT | NOT NULL DEFAULT 0 | Khóa lạc quan |
-*Ràng buộc duy nhất*: `CONSTRAINT uq_floor_building_label UNIQUE (building_id, label)`
+## buildings
 
-#### Bảng `rooms` (Phòng trọ)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | Định danh phòng |
-| `building_id` | UUID | NOT NULL, FK -> buildings(id) RESTRICT | Tòa nhà cha |
-| `floor_id` | UUID | NOT NULL, FK -> floors(id) RESTRICT | Tầng |
-| `code` | VARCHAR(50) | NOT NULL | Mã phòng (P101, P102) (BR-027) |
-| `capacity` | INT | NOT NULL CHECK (capacity > 0) | Sức chứa người tối đa (BR-027) |
-| `bookable` | BOOLEAN | NOT NULL DEFAULT true | Sẵn sàng cho thuê (BR-029) |
-| `base_rent` | NUMERIC(19,0)| NOT NULL CHECK (base_rent >= 0) | Giá thuê niêm yết tham khảo (BR-056)|
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm tạo |
-| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm cập nhật |
-| `version` | BIGINT | NOT NULL DEFAULT 0 | Khóa lạc quan |
-*Ràng buộc duy nhất*: `CONSTRAINT uq_room_building_code UNIQUE (building_id, code)`
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `name` | `character varying(100)` | Có |
+| `address` | `character varying(255)` | Có |
+| `active` | `boolean` | Có |
+| `created_at` | `timestamp with time zone` | Có |
+| `updated_at` | `timestamp with time zone` | Có |
+| `version` | `bigint` | Có |
 
----
+- `buildings_active_not_null`: `NOT NULL active`
+- `buildings_address_not_null`: `NOT NULL address`
+- `buildings_created_at_not_null`: `NOT NULL created_at`
+- `buildings_id_not_null`: `NOT NULL id`
+- `buildings_name_not_null`: `NOT NULL name`
+- `buildings_pkey`: `PRIMARY KEY (id)`
+- `buildings_updated_at_not_null`: `NOT NULL updated_at`
+- `buildings_version_not_null`: `NOT NULL version`
 
-### 2.3. Module Tenancy & Contracts
+## consumption_alerts
 
-#### Bảng `tenant_profiles` (Hồ sơ cư dân)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | Định danh hồ sơ |
-| `user_id` | UUID | NULL, FK -> users(id) RESTRICT | Tài khoản đăng nhập (BR-017, BR-020)|
-| `full_name` | VARCHAR(100) | NOT NULL | Họ và tên |
-| `phone` | VARCHAR(20) | NOT NULL | Số điện thoại liên hệ |
-| `citizen_id_masked`| VARCHAR(20) | NOT NULL | CCCD (đã che, không lưu lộ CCCD thật)|
-| `email` | VARCHAR(100) | NULL | Email |
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm tạo |
-| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm cập nhật |
-| `version` | BIGINT | NOT NULL DEFAULT 0 | Khóa lạc quan |
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `contract_id` | `uuid` | Có |
+| `meter_type` | `character varying(20)` | Có |
+| `billing_month` | `character varying(7)` | Có |
+| `reading_version` | `bigint` | Có |
+| `evaluation_status` | `character varying(30)` | Có |
+| `comparison_snapshot` | `jsonb` | Có |
+| `acknowledged_by` | `uuid` |  |
+| `acknowledged_at` | `timestamp with time zone` |  |
+| `reason` | `text` |  |
+| `created_at` | `timestamp with time zone` | Có |
 
-#### Bảng `contracts` (Hợp đồng thuê phòng)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | Định danh hợp đồng |
-| `room_id` | UUID | NOT NULL, FK -> rooms(id) RESTRICT | Phòng thuê |
-| `representative_tenant_id`| UUID | NOT NULL, FK -> tenant_profiles(id) RESTRICT | Người đại diện hợp đồng (BR-018) |
-| `status` | VARCHAR(20) | NOT NULL | `DRAFT`, `ACTIVE`, `ENDED` (BR-032) |
-| `actual_start_date`| DATE | NOT NULL | Ngày nhận phòng thực tế (BR-036) |
-| `planned_end_exclusive`| DATE | NOT NULL | Ngày trả dự kiến (cận không gồm) (BR-038)|
-| `actual_checkout_date`| DATE | NULL | Ngày trả phòng thực tế (BR-036, BR-043)|
-| `rent` | NUMERIC(19,0)| NOT NULL CHECK (rent >= 0) | Giá thuê cố định của hợp đồng (BR-041)|
-| `deposit_required`| NUMERIC(19,0)| NOT NULL CHECK (deposit_required >= 0) | Mức tiền cọc thỏa thuận (BR-109) |
-| `deposit_settlement_at`| TIMESTAMPTZ | NULL | Thời điểm xác nhận quyết toán cọc (BR-120)|
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm tạo |
-| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm cập nhật |
-| `version` | BIGINT | NOT NULL DEFAULT 0 | Khóa lạc quan |
-*Chỉ mục duy nhất bắt buộc (Partial Index)*:
-```sql
-CREATE UNIQUE INDEX uq_active_room_contract ON contracts(room_id) WHERE status = 'ACTIVE';
-```
-*(Đảm bảo một phòng chỉ có tối đa một hợp đồng ACTIVE tại một thời điểm — BR-035, EX-22)*.
+- `consumption_alerts_acknowledged_by_fkey`: `FOREIGN KEY (acknowledged_by) REFERENCES users(id) ON DELETE RESTRICT`
+- `consumption_alerts_billing_month_not_null`: `NOT NULL billing_month`
+- `consumption_alerts_comparison_snapshot_not_null`: `NOT NULL comparison_snapshot`
+- `consumption_alerts_contract_id_fkey`: `FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE RESTRICT`
+- `consumption_alerts_contract_id_not_null`: `NOT NULL contract_id`
+- `consumption_alerts_created_at_not_null`: `NOT NULL created_at`
+- `consumption_alerts_evaluation_status_not_null`: `NOT NULL evaluation_status`
+- `consumption_alerts_id_not_null`: `NOT NULL id`
+- `consumption_alerts_meter_type_not_null`: `NOT NULL meter_type`
+- `consumption_alerts_pkey`: `PRIMARY KEY (id)`
+- `consumption_alerts_reading_version_not_null`: `NOT NULL reading_version`
 
-#### Bảng `contract_members` (Thành viên cư trú trong hợp đồng)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | Định danh bản ghi thành viên |
-| `contract_id` | UUID | NOT NULL, FK -> contracts(id) RESTRICT | Hợp đồng cư trú |
-| `tenant_id` | UUID | NOT NULL, FK -> tenant_profiles(id) RESTRICT | Hồ sơ người ở |
-| `joined_on` | DATE | NOT NULL | Ngày vào ở `[joined_on, left_on)` (BR-045)|
-| `left_on` | DATE | NULL | Ngày rời phòng (cận không bao gồm) |
-| `is_representative`| BOOLEAN | NOT NULL DEFAULT false | Đánh dấu người đại diện (BR-018) |
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm tạo |
-| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm cập nhật |
-| `version` | BIGINT | NOT NULL DEFAULT 0 | Khóa lạc quan |
+## contract_events
 
-#### Bảng `contract_events` (Nhật ký sự kiện hợp đồng)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | Event ID |
-| `contract_id` | UUID | NOT NULL, FK -> contracts(id) RESTRICT | Hợp đồng |
-| `type` | VARCHAR(50) | NOT NULL | `ACTIVATION`, `EXTENSION`, `CHECKOUT` |
-| `old_value` | TEXT | NULL | Giá trị cũ (JSON) |
-| `new_value` | TEXT | NOT NULL | Giá trị mới (JSON) |
-| `reason` | TEXT | NOT NULL | Lý do thực hiện |
-| `actor_id` | UUID | NOT NULL, FK -> users(id) RESTRICT | Người thực hiện |
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm ghi |
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `contract_id` | `uuid` | Có |
+| `type` | `character varying(50)` | Có |
+| `old_value` | `text` |  |
+| `new_value` | `text` | Có |
+| `reason` | `text` | Có |
+| `actor_id` | `uuid` | Có |
+| `created_at` | `timestamp with time zone` | Có |
 
----
+- `contract_events_actor_id_fkey`: `FOREIGN KEY (actor_id) REFERENCES users(id) ON DELETE RESTRICT`
+- `contract_events_actor_id_not_null`: `NOT NULL actor_id`
+- `contract_events_contract_id_fkey`: `FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE RESTRICT`
+- `contract_events_contract_id_not_null`: `NOT NULL contract_id`
+- `contract_events_created_at_not_null`: `NOT NULL created_at`
+- `contract_events_id_not_null`: `NOT NULL id`
+- `contract_events_new_value_not_null`: `NOT NULL new_value`
+- `contract_events_pkey`: `PRIMARY KEY (id)`
+- `contract_events_reason_not_null`: `NOT NULL reason`
+- `contract_events_type_not_null`: `NOT NULL type`
 
-### 2.4. Module Services, Meters & Pricing
+## contract_members
 
-#### Bảng `service_definitions` (Định nghĩa loại phí/dịch vụ)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | Định danh dịch vụ |
-| `name` | VARCHAR(100) | NOT NULL | Tên dịch vụ (Điện, Nước, Vệ sinh, Wifi)|
-| `unit` | VARCHAR(20) | NOT NULL | Đơn vị tính (kWh, m³, phòng/tháng, người)|
-| `calculation_type` | VARCHAR(30) | NOT NULL | `ROOM_MONTHLY`, `PERSON_MONTHLY`, `METERED`, `ONE_OFF` (BR-069..074)|
-| `active` | BOOLEAN | NOT NULL DEFAULT true | Trạng thái kích hoạt |
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm tạo |
-| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm cập nhật |
-| `version` | BIGINT | NOT NULL DEFAULT 0 | Khóa lạc quan |
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `contract_id` | `uuid` | Có |
+| `tenant_id` | `uuid` | Có |
+| `joined_on` | `date` | Có |
+| `left_on` | `date` |  |
+| `is_representative` | `boolean` | Có |
+| `created_at` | `timestamp with time zone` | Có |
+| `updated_at` | `timestamp with time zone` | Có |
+| `version` | `bigint` | Có |
 
-#### Bảng `tariffs` (Bảng giá dịch vụ theo tòa và tháng hiệu lực)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | Định danh mức giá |
-| `building_id` | UUID | NOT NULL, FK -> buildings(id) RESTRICT | Tòa nhà áp dụng |
-| `service_id` | UUID | NOT NULL, FK -> service_definitions(id) RESTRICT | Dịch vụ tính giá |
-| `effective_month`| VARCHAR(7) | NOT NULL | Tháng bắt đầu hiệu lực (`YYYY-MM`) (BR-064)|
-| `unit_price` | NUMERIC(19,0)| NOT NULL CHECK (unit_price >= 0) | Đơn giá áp dụng (BR-064) |
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm tạo |
-| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm cập nhật |
-| `version` | BIGINT | NOT NULL DEFAULT 0 | Khóa lạc quan |
-*Ràng buộc duy nhất*: `CONSTRAINT uq_building_service_month UNIQUE (building_id, service_id, effective_month)`
+- `contract_members_contract_id_fkey`: `FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE RESTRICT`
+- `contract_members_contract_id_not_null`: `NOT NULL contract_id`
+- `contract_members_created_at_not_null`: `NOT NULL created_at`
+- `contract_members_id_not_null`: `NOT NULL id`
+- `contract_members_is_representative_not_null`: `NOT NULL is_representative`
+- `contract_members_joined_on_not_null`: `NOT NULL joined_on`
+- `contract_members_pkey`: `PRIMARY KEY (id)`
+- `contract_members_tenant_id_fkey`: `FOREIGN KEY (tenant_id) REFERENCES tenant_profiles(id) ON DELETE RESTRICT`
+- `contract_members_tenant_id_not_null`: `NOT NULL tenant_id`
+- `contract_members_updated_at_not_null`: `NOT NULL updated_at`
+- `contract_members_version_not_null`: `NOT NULL version`
 
-#### Bảng `contract_service_subscriptions` (Đăng ký dịch vụ của hợp đồng)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | Định danh đăng ký |
-| `contract_id` | UUID | NOT NULL, FK -> contracts(id) RESTRICT | Hợp đồng |
-| `service_id` | UUID | NOT NULL, FK -> service_definitions(id) RESTRICT| Dịch vụ đăng ký |
-| `start_month` | VARCHAR(7) | NOT NULL | Tháng bắt đầu sử dụng (`YYYY-MM`) |
-| `end_month_exclusive`| VARCHAR(7)| NULL | Tháng ngừng sử dụng |
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm tạo |
+## contract_service_subscriptions
 
-#### Bảng `room_meters` (Đồng hồ đo điện/nước phòng)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | Định danh đồng hồ |
-| `room_id` | UUID | NOT NULL, FK -> rooms(id) RESTRICT | Phòng lắp đặt |
-| `type` | VARCHAR(20) | NOT NULL | `ELECTRICITY`, `WATER` |
-| `serial` | VARCHAR(50) | NOT NULL | Số seri công tơ |
-| `installed_on` | DATE | NOT NULL | Ngày lắp đặt |
-| `initial_reading`| NUMERIC(18,3)| NOT NULL DEFAULT 0.000 | Chỉ số ban đầu |
-| `active` | BOOLEAN | NOT NULL DEFAULT true | Đang hoạt động |
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm tạo |
-| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm cập nhật |
-| `version` | BIGINT | NOT NULL DEFAULT 0 | Khóa lạc quan |
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `contract_id` | `uuid` | Có |
+| `service_id` | `uuid` | Có |
+| `start_month` | `character varying(7)` | Có |
+| `end_month_exclusive` | `character varying(7)` |  |
+| `created_at` | `timestamp with time zone` | Có |
+| `version` | `bigint` | Có |
 
-#### Bảng `meter_readings` (Bản ghi chỉ số công tơ)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | Định danh bản ghi chỉ số |
-| `meter_id` | UUID | NOT NULL, FK -> room_meters(id) RESTRICT | Đồng hồ đo |
-| `reading_date` | DATE | NOT NULL | Ngày ghi chỉ số (BR-061) |
-| `value` | NUMERIC(18,3)| NOT NULL CHECK (value >= 0) | Chỉ số đọc được (BR-008, BR-059) |
-| `kind` | VARCHAR(20) | NOT NULL | `HANDOVER`, `PERIOD_END`, `CHECKOUT` |
-| `file_id` | UUID | NULL, FK -> stored_files(id) RESTRICT | Ảnh công tơ đính kèm (BR-061) |
-| `created_by` | UUID | NOT NULL, FK -> users(id) RESTRICT | Người nhập số |
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm ghi |
-| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm sửa nháp |
-| `version` | BIGINT | NOT NULL DEFAULT 0 | Khóa lạc quan |
+- `contract_service_subscriptions_contract_id_fkey`: `FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE RESTRICT`
+- `contract_service_subscriptions_contract_id_not_null`: `NOT NULL contract_id`
+- `contract_service_subscriptions_created_at_not_null`: `NOT NULL created_at`
+- `contract_service_subscriptions_id_not_null`: `NOT NULL id`
+- `contract_service_subscriptions_pkey`: `PRIMARY KEY (id)`
+- `contract_service_subscriptions_service_id_fkey`: `FOREIGN KEY (service_id) REFERENCES service_definitions(id) ON DELETE RESTRICT`
+- `contract_service_subscriptions_service_id_not_null`: `NOT NULL service_id`
+- `contract_service_subscriptions_start_month_not_null`: `NOT NULL start_month`
+- `contract_service_subscriptions_version_not_null`: `NOT NULL version`
+- `uq_contract_service_period`: `UNIQUE (contract_id, service_id, start_month)`
 
-#### Bảng `consumption_alerts` (Cảnh báo tiêu thụ bất thường)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | Định danh cảnh báo |
-| `contract_id` | UUID | NOT NULL, FK -> contracts(id) RESTRICT | Hợp đồng liên quan |
-| `meter_type` | VARCHAR(20) | NOT NULL | `ELECTRICITY`, `WATER` |
-| `billing_month` | VARCHAR(7) | NOT NULL | Kỳ đánh giá (`YYYY-MM`) (BR-139) |
-| `reading_version`| BIGINT | NOT NULL | Phiên bản chỉ số khi đánh giá (BR-146)|
-| `evaluation_status`| VARCHAR(30)| NOT NULL | `NORMAL`, `WARNING`, `INSUFFICIENT_DATA`, `NOT_COMPARABLE` (BR-143)|
-| `comparison_snapshot`| JSONB | NOT NULL | Snapshot 3 kỳ trước, trung vị, chênh lệch (BR-144)|
-| `acknowledged_by`| UUID | NULL, FK -> users(id) RESTRICT | Quản lý xác nhận số đúng (BR-145) |
-| `acknowledged_at`| TIMESTAMPTZ| NULL | Thời điểm xác nhận |
-| `reason` | TEXT | NULL | Lý do giải trình của quản lý (BR-145) |
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm đánh giá |
+## contracts
 
-#### Bảng `one_off_charges` (Khoản thu phát sinh bổ sung)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | Định danh khoản thu |
-| `contract_id` | UUID | NOT NULL, FK -> contracts(id) RESTRICT | Hợp đồng chịu phí |
-| `billing_month` | VARCHAR(7) | NOT NULL | Tháng áp dụng (`YYYY-MM`) |
-| `label` | VARCHAR(100) | NOT NULL | Tên khoản thu |
-| `amount` | NUMERIC(19,0)| NOT NULL CHECK (amount >= 0) | Số tiền (BR-073) |
-| `reason` | TEXT | NOT NULL | Lý do thu (BR-073) |
-| `source_ref` | VARCHAR(100) | NULL | Mã liên kết sự cố/sửa chữa (BR-117) |
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm tạo |
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `room_id` | `uuid` | Có |
+| `representative_tenant_id` | `uuid` | Có |
+| `status` | `character varying(20)` | Có |
+| `actual_start_date` | `date` | Có |
+| `planned_end_exclusive` | `date` | Có |
+| `actual_checkout_date` | `date` |  |
+| `rent` | `numeric(19,0)` | Có |
+| `deposit_required` | `numeric(19,0)` | Có |
+| `deposit_settlement_at` | `timestamp with time zone` |  |
+| `created_at` | `timestamp with time zone` | Có |
+| `updated_at` | `timestamp with time zone` | Có |
+| `version` | `bigint` | Có |
+| `deposit_status` | `character varying(20)` | Có |
+| `deposit_settled_at` | `timestamp with time zone` |  |
 
----
+- `contracts_actual_start_date_not_null`: `NOT NULL actual_start_date`
+- `contracts_created_at_not_null`: `NOT NULL created_at`
+- `contracts_deposit_required_check`: `CHECK ((deposit_required >= (0)::numeric))`
+- `contracts_deposit_required_not_null`: `NOT NULL deposit_required`
+- `contracts_deposit_status_not_null`: `NOT NULL deposit_status`
+- `contracts_id_not_null`: `NOT NULL id`
+- `contracts_pkey`: `PRIMARY KEY (id)`
+- `contracts_planned_end_exclusive_not_null`: `NOT NULL planned_end_exclusive`
+- `contracts_rent_check`: `CHECK ((rent >= (0)::numeric))`
+- `contracts_rent_not_null`: `NOT NULL rent`
+- `contracts_representative_tenant_id_fkey`: `FOREIGN KEY (representative_tenant_id) REFERENCES tenant_profiles(id) ON DELETE RESTRICT`
+- `contracts_representative_tenant_id_not_null`: `NOT NULL representative_tenant_id`
+- `contracts_room_id_fkey`: `FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE RESTRICT`
+- `contracts_room_id_not_null`: `NOT NULL room_id`
+- `contracts_status_not_null`: `NOT NULL status`
+- `contracts_updated_at_not_null`: `NOT NULL updated_at`
+- `contracts_version_not_null`: `NOT NULL version`
 
-### 2.5. Module Billing & Invoices
+## deposit_ledger_entries
 
-#### Bảng `invoices` (Hóa đơn kỳ)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | Định danh hóa đơn |
-| `contract_id` | UUID | NOT NULL, FK -> contracts(id) RESTRICT | Hợp đồng (BR-049) |
-| `billing_month` | VARCHAR(7) | NOT NULL | Tháng tính tiền (`YYYY-MM`) (BR-049) |
-| `status` | VARCHAR(20) | NOT NULL | `DRAFT`, `ISSUED` (BR-075) |
-| `period_start` | DATE | NOT NULL | Bắt đầu khoảng tính `[start, end)` (BR-050)|
-| `period_end_exclusive`| DATE | NOT NULL | Kết thúc khoảng tính (không bao gồm) |
-| `due_date` | DATE | NOT NULL | Ngày đến hạn nợ (BR-086) |
-| `issued_at` | TIMESTAMPTZ | NULL | Thời điểm phát hành chính thức (BR-078)|
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm lập nháp |
-| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm cập nhật |
-| `version` | BIGINT | NOT NULL DEFAULT 0 | Khóa lạc quan |
-*Ràng buộc duy nhất*: `CONSTRAINT uq_invoice_contract_month UNIQUE (contract_id, billing_month)`
-*(Đảm bảo mỗi hợp đồng chỉ có đúng một hóa đơn cho một tháng lịch — BR-049, EX-23)*.
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `contract_id` | `uuid` | Có |
+| `entry_type` | `character varying(30)` | Có |
+| `amount` | `numeric(19,0)` | Có |
+| `payment_method` | `character varying(30)` |  |
+| `reference_code` | `character varying(100)` |  |
+| `note` | `text` |  |
+| `reason` | `text` |  |
+| `ref_entry_id` | `uuid` |  |
+| `invoice_id` | `uuid` |  |
+| `operation_id` | `uuid` |  |
+| `actor_id` | `uuid` |  |
+| `recorded_at` | `timestamp with time zone` | Có |
+| `effective_date` | `date` | Có |
 
-#### Bảng `invoice_items` (Chi tiết dòng hóa đơn snapshot)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | Định danh dòng |
-| `invoice_id` | UUID | NOT NULL, FK -> invoices(id) RESTRICT | Hóa đơn cha (BR-078) |
-| `type` | VARCHAR(30) | NOT NULL | `RENT`, `ELECTRICITY`, `WATER`, `SERVICE`, `ONE_OFF` |
-| `label` | VARCHAR(100) | NOT NULL | Tên dòng hiển thị (BR-068) |
-| `quantity` | NUMERIC(18,3)| NOT NULL | Số ngày, số kWh, số m³, người-ngày (BR-068)|
-| `unit_price` | NUMERIC(19,0)| NOT NULL | Đơn giá được snapshot (BR-068) |
-| `amount` | NUMERIC(19,0)| NOT NULL | Thành tiền làm tròn HALF_UP đến đồng (BR-006)|
-| `calculation_snapshot`| JSONB | NOT NULL | Công thức và tham số chi tiết (BR-068) |
-| `reading_refs` | JSONB | NULL | Chỉ số đầu/cuối và ID reading (BR-058) |
-| `tariff_ref` | UUID | NULL | ID của Tariff đã snapshot |
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm tạo |
+- `chk_deposit_amount_nonzero`: `CHECK ((amount <> (0)::numeric))`
+- `chk_deposit_entry_type`: `CHECK (((entry_type)::text = ANY ((ARRAY['RECEIPT'::character varying, 'RECEIPT_CORRECTION'::character varying, 'REFUND'::character varying, 'DEDUCTION'::character varying, 'OFFSET_OUT'::character varying])::text[])))`
+- `deposit_ledger_entries_actor_id_fkey`: `FOREIGN KEY (actor_id) REFERENCES users(id) ON DELETE SET NULL`
+- `deposit_ledger_entries_amount_not_null`: `NOT NULL amount`
+- `deposit_ledger_entries_contract_id_fkey`: `FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE RESTRICT`
+- `deposit_ledger_entries_contract_id_not_null`: `NOT NULL contract_id`
+- `deposit_ledger_entries_effective_date_not_null`: `NOT NULL effective_date`
+- `deposit_ledger_entries_entry_type_not_null`: `NOT NULL entry_type`
+- `deposit_ledger_entries_id_not_null`: `NOT NULL id`
+- `deposit_ledger_entries_invoice_id_fkey`: `FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE RESTRICT`
+- `deposit_ledger_entries_operation_id_fkey`: `FOREIGN KEY (operation_id) REFERENCES financial_operations(id) ON DELETE SET NULL`
+- `deposit_ledger_entries_pkey`: `PRIMARY KEY (id)`
+- `deposit_ledger_entries_recorded_at_not_null`: `NOT NULL recorded_at`
+- `deposit_ledger_entries_ref_entry_id_fkey`: `FOREIGN KEY (ref_entry_id) REFERENCES deposit_ledger_entries(id) ON DELETE RESTRICT`
 
-#### Bảng `invoice_adjustments` (Điều chỉnh giá trị hóa đơn đã phát hành)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | Định danh điều chỉnh |
-| `invoice_id` | UUID | NOT NULL, FK -> invoices(id) RESTRICT | Hóa đơn được điều chỉnh (BR-080) |
-| `delta_amount` | NUMERIC(19,0)| NOT NULL CHECK (delta_amount <> 0) | Chênh lệch có dấu (+ hoặc -) (BR-081) |
-| `reason` | TEXT | NOT NULL | Lý do điều chỉnh (BR-080) |
-| `old_snapshot` | JSONB | NOT NULL | Snapshot dữ liệu trước điều chỉnh |
-| `new_snapshot` | JSONB | NOT NULL | Snapshot dữ liệu sau điều chỉnh |
-| `effective_date`| DATE | NOT NULL | Ngày có hiệu lực nghiệp vụ (BR-080) |
-| `recorded_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm ghi hệ thống |
-| `created_by` | UUID | NOT NULL, FK -> users(id) RESTRICT | Quản lý thực hiện |
-| `operation_id` | UUID | NOT NULL, FK -> financial_operations(id) RESTRICT| Giao dịch idempotent bảo vệ |
+## financial_operations
 
-#### Bảng `invoice_notes` (Ghi chú đính chính mô tả phi tài chính)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | ID ghi chú |
-| `invoice_id` | UUID | NOT NULL, FK -> invoices(id) RESTRICT | Hóa đơn |
-| `content` | TEXT | NOT NULL | Nội dung đính chính (BR-083) |
-| `reason` | TEXT | NOT NULL | Lý do ghi chú |
-| `created_by` | UUID | NOT NULL, FK -> users(id) RESTRICT | Người ghi |
-| `recorded_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm ghi |
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `idempotency_key` | `character varying(100)` | Có |
+| `actor_id` | `uuid` | Có |
+| `action` | `character varying(50)` | Có |
+| `request_hash` | `character varying(64)` | Có |
+| `status` | `character varying(20)` | Có |
+| `response_snapshot` | `text` | Có |
+| `created_at` | `timestamp with time zone` | Có |
 
----
+- `financial_operations_action_not_null`: `NOT NULL action`
+- `financial_operations_actor_id_fkey`: `FOREIGN KEY (actor_id) REFERENCES users(id) ON DELETE RESTRICT`
+- `financial_operations_actor_id_not_null`: `NOT NULL actor_id`
+- `financial_operations_created_at_not_null`: `NOT NULL created_at`
+- `financial_operations_id_not_null`: `NOT NULL id`
+- `financial_operations_idempotency_key_not_null`: `NOT NULL idempotency_key`
+- `financial_operations_pkey`: `PRIMARY KEY (id)`
+- `financial_operations_request_hash_not_null`: `NOT NULL request_hash`
+- `financial_operations_response_snapshot_not_null`: `NOT NULL response_snapshot`
+- `financial_operations_status_not_null`: `NOT NULL status`
+- `uq_financial_actor_key`: `UNIQUE (actor_id, idempotency_key)`
 
-### 2.6. Module Finance & Ledgers
+## floors
 
-#### Bảng `financial_operations` (Quản lý giao dịch tài chính Idempotent)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | ID thao tác tài chính |
-| `idempotency_key`| VARCHAR(100) | NOT NULL, UNIQUE | Khóa chống trùng do client gửi (BR-103)|
-| `actor_id` | UUID | NOT NULL, FK -> users(id) RESTRICT | Người thực hiện |
-| `action` | VARCHAR(50) | NOT NULL | `PAYMENT`, `CORRECTION`, `REFUND`, `CREDIT_TRANSFER`, `DEPOSIT_RECEIPT`, `DEPOSIT_OFFSET`, `DEPOSIT_DEDUCTION` |
-| `request_hash` | VARCHAR(64) | NOT NULL | SHA-256 hash của request payload (BR-103)|
-| `status` | VARCHAR(20) | NOT NULL | `SUCCESS`, `FAILED` |
-| `response_snapshot`| TEXT | NOT NULL | Kết quả lưu lại để trả cho request retry|
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm thực thi |
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `building_id` | `uuid` | Có |
+| `name` | `character varying(50)` | Có |
+| `floor_order` | `integer` | Có |
+| `created_at` | `timestamp with time zone` | Có |
+| `updated_at` | `timestamp with time zone` | Có |
+| `version` | `bigint` | Có |
 
-#### Bảng `invoice_ledger_entries` (Sổ cái thanh toán hóa đơn — Append-only)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | Định danh dòng sổ cái |
-| `invoice_id` | UUID | NOT NULL, FK -> invoices(id) RESTRICT | Hóa đơn áp dụng (BR-111) |
-| `type` | VARCHAR(30) | NOT NULL | `PAYMENT`, `PAYMENT_CORRECTION`, `REFUND`, `CREDIT_OUT`, `CREDIT_IN`, `DEPOSIT_OFFSET_IN` (Mục 6 BR)|
-| `signed_amount` | NUMERIC(19,0)| NOT NULL CHECK (signed_amount <> 0) | Số tiền có dấu áp dụng cho hóa đơn |
-| `original_entry_id`| UUID | NULL, FK -> invoice_ledger_entries(id) RESTRICT| Tham chiếu bút toán gốc khi sửa sai |
-| `operation_id` | UUID | NOT NULL, FK -> financial_operations(id) RESTRICT| Giao dịch idempotent sinh bút toán |
-| `transfer_id` | UUID | NULL | Cặp chuyển dư giữa 2 hóa đơn (BR-101)|
-| `effective_date`| DATE | NOT NULL | Ngày ghi nhận nghiệp vụ (BR-148) |
-| `recorded_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm ghi hệ thống |
-| `created_by` | UUID | NOT NULL, FK -> users(id) RESTRICT | Người thu / thực hiện |
-| `reason` | TEXT | NULL | Lý do (bắt buộc khi sửa sai/hoàn/chuyển dư)|
-| `payment_method`| VARCHAR(50) | NULL | `CASH`, `BANK_TRANSFER_MANUAL` (BR-092) |
-| `reference_code`| VARCHAR(100) | NULL | Mã giao dịch tham chiếu tùy chọn |
+- `floors_building_id_fkey`: `FOREIGN KEY (building_id) REFERENCES buildings(id) ON DELETE RESTRICT`
+- `floors_building_id_not_null`: `NOT NULL building_id`
+- `floors_created_at_not_null`: `NOT NULL created_at`
+- `floors_floor_order_not_null`: `NOT NULL floor_order`
+- `floors_id_not_null`: `NOT NULL id`
+- `floors_name_not_null`: `NOT NULL name`
+- `floors_pkey`: `PRIMARY KEY (id)`
+- `floors_updated_at_not_null`: `NOT NULL updated_at`
+- `floors_version_not_null`: `NOT NULL version`
+- `uq_building_floor_order`: `UNIQUE (building_id, floor_order)`
 
-#### Bảng `deposit_ledger_entries` (Sổ cái tiền cọc — Append-only)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | Định danh dòng sổ cọc |
-| `contract_id` | UUID | NOT NULL, FK -> contracts(id) RESTRICT | Hợp đồng sở hữu cọc (BR-109) |
-| `type` | VARCHAR(30) | NOT NULL | `RECEIPT`, `RECEIPT_CORRECTION`, `REFUND`, `DEDUCTION`, `OFFSET_OUT` (BR-110)|
-| `signed_amount` | NUMERIC(19,0)| NOT NULL CHECK (signed_amount <> 0) | Số tiền có dấu áp dụng cho cọc |
-| `original_entry_id`| UUID | NULL, FK -> deposit_ledger_entries(id) RESTRICT| Tham chiếu phiếu nhận cọc gốc khi sửa |
-| `operation_id` | UUID | NOT NULL, FK -> financial_operations(id) RESTRICT| Giao dịch idempotent sinh bút toán |
-| `transfer_id` | UUID | NULL | Mã liên kết khi bù trừ sang hóa đơn (BR-114)|
-| `effective_date`| DATE | NOT NULL | Ngày nghiệp vụ (BR-148) |
-| `recorded_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm ghi hệ thống |
-| `created_by` | UUID | NOT NULL, FK -> users(id) RESTRICT | Người thực hiện |
-| `reason` | TEXT | NOT NULL | Lý do (bắt buộc khi hoàn, khấu trừ, bù)|
-| `source_ref` | VARCHAR(100) | NULL | Mã liên kết sự cố/chi phí (BR-117) |
+## invites
 
----
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `user_id` | `uuid` | Có |
+| `code_hash` | `character varying(255)` | Có |
+| `purpose` | `character varying(30)` | Có |
+| `expires_at` | `timestamp with time zone` | Có |
+| `consumed_at` | `timestamp with time zone` |  |
+| `created_by` | `uuid` | Có |
+| `created_at` | `timestamp with time zone` | Có |
 
-### 2.7. Module Operations, Feedback & Notifications
+- `invites_code_hash_not_null`: `NOT NULL code_hash`
+- `invites_created_at_not_null`: `NOT NULL created_at`
+- `invites_created_by_fkey`: `FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT`
+- `invites_created_by_not_null`: `NOT NULL created_by`
+- `invites_expires_at_not_null`: `NOT NULL expires_at`
+- `invites_id_not_null`: `NOT NULL id`
+- `invites_pkey`: `PRIMARY KEY (id)`
+- `invites_purpose_check`: `CHECK (((purpose)::text = ANY ((ARRAY['TENANT_INVITE'::character varying, 'PASSWORD_RESET'::character varying])::text[])))`
+- `invites_purpose_not_null`: `NOT NULL purpose`
+- `invites_user_id_fkey`: `FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT`
+- `invites_user_id_not_null`: `NOT NULL user_id`
 
-#### Bảng `maintenance_issues` (Yêu cầu sự cố & sửa chữa)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | Định danh yêu cầu sự cố |
-| `contract_id` | UUID | NOT NULL, FK -> contracts(id) RESTRICT | Hợp đồng của người báo (BR-125) |
-| `room_id` | UUID | NOT NULL, FK -> rooms(id) RESTRICT | Phòng xảy ra sự cố |
-| `title` | VARCHAR(150) | NOT NULL | Tiêu đề sự cố |
-| `description` | TEXT | NOT NULL | Mô tả chi tiết |
-| `status` | VARCHAR(20) | NOT NULL | `OPEN`, `ACCEPTED`, `IN_PROGRESS`, `RESOLVED`, `CLOSED` (BR-126)|
-| `assignee_id` | UUID | NULL, FK -> users(id) RESTRICT | Nhân viên được phân công xử lý |
-| `created_by` | UUID | NOT NULL, FK -> users(id) RESTRICT | Người báo (Tenant hoặc Quản lý) |
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm tạo |
-| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm cập nhật |
-| `version` | BIGINT | NOT NULL DEFAULT 0 | Khóa lạc quan |
+## invoice_adjustments
 
-#### Bảng `issue_status_history` (Lịch sử chuyển trạng thái sự cố)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | ID lịch sử |
-| `issue_id` | UUID | NOT NULL, FK -> maintenance_issues(id) RESTRICT| Sự cố cha |
-| `old_status` | VARCHAR(20) | NOT NULL | Trạng thái trước |
-| `new_status` | VARCHAR(20) | NOT NULL | Trạng thái mới |
-| `comment` | TEXT | NULL | Ghi chú / lý do mở lại (BR-127, BR-128)|
-| `actor_id` | UUID | NOT NULL, FK -> users(id) RESTRICT | Người thực hiện |
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm chuyển |
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `invoice_id` | `uuid` | Có |
+| `delta_amount` | `numeric(19,0)` | Có |
+| `reason` | `text` | Có |
+| `old_snapshot` | `jsonb` | Có |
+| `new_snapshot` | `jsonb` | Có |
+| `effective_date` | `date` | Có |
+| `recorded_at` | `timestamp with time zone` | Có |
+| `created_by` | `uuid` | Có |
+| `operation_id` | `uuid` | Có |
 
-#### Bảng `invoice_feedbacks` (Phản hồi thắc mắc hóa đơn)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | ID phản hồi |
-| `invoice_id` | UUID | NOT NULL, FK -> invoices(id) RESTRICT | Hóa đơn liên quan (BR-123) |
-| `created_by` | UUID | NOT NULL, FK -> users(id) RESTRICT | Người gửi phản hồi (Tenant) |
-| `message` | TEXT | NOT NULL | Nội dung thắc mắc ban đầu |
-| `status` | VARCHAR(20) | NOT NULL | `OPEN`, `IN_REVIEW`, `RESOLVED` (BR-124)|
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm gửi |
-| `updated_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm cập nhật |
+- `invoice_adjustments_created_by_fkey`: `FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT`
+- `invoice_adjustments_created_by_not_null`: `NOT NULL created_by`
+- `invoice_adjustments_delta_amount_check`: `CHECK ((delta_amount <> (0)::numeric))`
+- `invoice_adjustments_delta_amount_not_null`: `NOT NULL delta_amount`
+- `invoice_adjustments_effective_date_not_null`: `NOT NULL effective_date`
+- `invoice_adjustments_id_not_null`: `NOT NULL id`
+- `invoice_adjustments_invoice_id_fkey`: `FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE RESTRICT`
+- `invoice_adjustments_invoice_id_not_null`: `NOT NULL invoice_id`
+- `invoice_adjustments_new_snapshot_not_null`: `NOT NULL new_snapshot`
+- `invoice_adjustments_old_snapshot_not_null`: `NOT NULL old_snapshot`
+- `invoice_adjustments_operation_id_fkey`: `FOREIGN KEY (operation_id) REFERENCES financial_operations(id) ON DELETE RESTRICT`
+- `invoice_adjustments_operation_id_not_null`: `NOT NULL operation_id`
+- `invoice_adjustments_pkey`: `PRIMARY KEY (id)`
+- `invoice_adjustments_reason_not_null`: `NOT NULL reason`
+- `invoice_adjustments_recorded_at_not_null`: `NOT NULL recorded_at`
 
-#### Bảng `invoice_feedback_replies` (Trao đổi phản hồi hóa đơn)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | ID câu trả lời |
-| `feedback_id` | UUID | NOT NULL, FK -> invoice_feedbacks(id) RESTRICT| Phản hồi cha |
-| `actor_id` | UUID | NOT NULL, FK -> users(id) RESTRICT | Người trả lời (Staff/Owner/Tenant)|
-| `message` | TEXT | NOT NULL | Nội dung phản hồi |
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm gửi |
+## invoice_feedback_replies
 
-#### Bảng `notifications` (Thông báo nội bộ trong ứng dụng)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | ID thông báo |
-| `user_id` | UUID | NOT NULL, FK -> users(id) RESTRICT | Người nhận cụ thể (BR-134) |
-| `event_key` | VARCHAR(100) | NOT NULL | Khóa chống trùng thông báo (BR-136) |
-| `type` | VARCHAR(50) | NOT NULL | `INVOICE_ISSUED`, `INVOICE_ADJUSTED`, `ISSUE_UPDATED`, `ANNOUNCEMENT`|
-| `title` | VARCHAR(150) | NOT NULL | Tiêu đề thông báo |
-| `message` | TEXT | NOT NULL | Nội dung thông báo |
-| `resource_type` | VARCHAR(50) | NULL | `INVOICE`, `ISSUE`, `CONTRACT` |
-| `resource_id` | UUID | NULL | ID đối tượng liên kết |
-| `read_at` | TIMESTAMPTZ | NULL | Thời điểm đã đọc (BR-134) |
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm tạo |
-*Ràng buộc duy nhất*: `CONSTRAINT uq_notification_user_event UNIQUE (user_id, event_key)`
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `feedback_id` | `uuid` | Có |
+| `actor_id` | `uuid` | Có |
+| `message` | `text` | Có |
+| `created_at` | `timestamp with time zone` | Có |
 
-#### Bảng `stored_files` (Tệp đính kèm & Ảnh riêng tư)
-| Cột | Kiểu dữ liệu | Ràng buộc | Mô tả & Quy tắc BR |
-|---|---|---|---|
-| `id` | UUID | PK | ID file |
-| `storage_key` | VARCHAR(255) | NOT NULL, UNIQUE | Đường dẫn tệp trong private storage (BR-130)|
-| `original_name`| VARCHAR(255) | NOT NULL | Tên tệp gốc khi tải lên |
-| `mime_type` | VARCHAR(100) | NOT NULL | `image/jpeg`, `image/png`, `image/webp` (BR-131)|
-| `size` | BIGINT | NOT NULL CHECK (size <= 5242880) | Kích thước bytes (tối đa 5MB) (BR-131)|
-| `uploaded_by` | UUID | NOT NULL, FK -> users(id) RESTRICT | Người tải lên |
-| `parent_type` | VARCHAR(50) | NOT NULL | `METER_READING`, `MAINTENANCE_ISSUE`, `INVOICE_FEEDBACK`|
-| `parent_id` | UUID | NOT NULL | ID bản ghi cha |
-| `status` | VARCHAR(20) | NOT NULL | `TEMPORARY`, `ATTACHED` (BR-132) |
-| `created_at` | TIMESTAMPTZ | NOT NULL DEFAULT clock_timestamp() | Thời điểm tải lên |
+- `invoice_feedback_replies_actor_id_fkey`: `FOREIGN KEY (actor_id) REFERENCES users(id) ON DELETE RESTRICT`
+- `invoice_feedback_replies_actor_id_not_null`: `NOT NULL actor_id`
+- `invoice_feedback_replies_created_at_not_null`: `NOT NULL created_at`
+- `invoice_feedback_replies_feedback_id_fkey`: `FOREIGN KEY (feedback_id) REFERENCES invoice_feedbacks(id) ON DELETE CASCADE`
+- `invoice_feedback_replies_feedback_id_not_null`: `NOT NULL feedback_id`
+- `invoice_feedback_replies_id_not_null`: `NOT NULL id`
+- `invoice_feedback_replies_message_not_null`: `NOT NULL message`
+- `invoice_feedback_replies_pkey`: `PRIMARY KEY (id)`
 
----
+## invoice_feedbacks
 
-## 3. Công thức Số dư và Quy tắc Sổ cái (Ledger Rules)
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `invoice_id` | `uuid` | Có |
+| `created_by` | `uuid` | Có |
+| `message` | `text` | Có |
+| `status` | `character varying(20)` | Có |
+| `created_at` | `timestamp with time zone` | Có |
+| `updated_at` | `timestamp with time zone` | Có |
 
-### 3.1. Hóa đơn (Invoice Ledger)
-- **Nợ hiệu lực (`effectiveDue`)**:
-  $$\text{effectiveDue} = \sum \text{invoice\_items.amount} + \sum \text{invoice\_adjustments.delta\_amount} \ge 0 \quad (\text{BR-087, BR-081})$$
-- **Thanh toán ròng đã áp dụng (`netApplied`)**:
-  $$\text{netApplied} = \sum \text{invoice\_ledger\_entries.signed\_amount} \ge 0 \quad (\text{BR-088, BR-096})$$
-- **Công nợ còn lại (`debt`)**:
-  $$\text{debt} = \max(\text{effectiveDue} - \text{netApplied}, 0) \quad (\text{BR-089})$$
-- **Khoản tiền dư (`credit`)**:
-  $$\text{credit} = \max(\text{netApplied} - \text{effectiveDue}, 0) \quad (\text{BR-089})$$
-- **Trạng thái thanh toán suy ra**:
-  - `CREDIT`: nếu $\text{credit} > 0$.
-  - `PAID`: nếu $\text{debt} = 0$ và $\text{credit} = 0$ (kể cả hóa đơn 0đ không có thanh toán — BR-091).
-  - `PARTIAL`: nếu $\text{debt} > 0$ và $\text{netApplied} > 0$.
-  - `UNPAID`: nếu $\text{netApplied} = 0$ và $\text{debt} > 0$.
+- `chk_feedback_status`: `CHECK (((status)::text = ANY ((ARRAY['OPEN'::character varying, 'IN_REVIEW'::character varying, 'RESOLVED'::character varying])::text[])))`
+- `invoice_feedbacks_created_at_not_null`: `NOT NULL created_at`
+- `invoice_feedbacks_created_by_fkey`: `FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT`
+- `invoice_feedbacks_created_by_not_null`: `NOT NULL created_by`
+- `invoice_feedbacks_id_not_null`: `NOT NULL id`
+- `invoice_feedbacks_invoice_id_fkey`: `FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE RESTRICT`
+- `invoice_feedbacks_invoice_id_not_null`: `NOT NULL invoice_id`
+- `invoice_feedbacks_message_not_null`: `NOT NULL message`
+- `invoice_feedbacks_pkey`: `PRIMARY KEY (id)`
+- `invoice_feedbacks_status_not_null`: `NOT NULL status`
+- `invoice_feedbacks_updated_at_not_null`: `NOT NULL updated_at`
 
-### 3.2. Tiền cọc (Deposit Ledger)
-- **Tiền cọc đang giữ (`depositHeld`)**:
-  $$\text{depositHeld} = \sum \text{deposit\_ledger\_entries.signed\_amount} \ge 0 \quad (\text{BR-111})$$
-- **Trạng thái cọc suy ra**:
-  - `NOT_RECEIVED`: khi chưa có bản ghi `RECEIPT` nào.
-  - `HOLDING`: khi $\text{depositHeld} > 0$ trên hợp đồng `ACTIVE` hoặc `DRAFT`.
-  - `SETTLING`: khi hợp đồng đã `ENDED` nhưng chưa xác nhận quyết toán (`deposit_settlement_at IS NULL`) (BR-120).
-  - `SETTLED`: khi hợp đồng `ENDED`, $\text{depositHeld} = 0$ và đã ghi nhận `deposit_settlement_at` (BR-120).
+## invoice_items
 
----
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `invoice_id` | `uuid` | Có |
+| `type` | `character varying(30)` | Có |
+| `label` | `character varying(100)` | Có |
+| `quantity` | `numeric(18,3)` | Có |
+| `unit_price` | `numeric(19,0)` | Có |
+| `amount` | `numeric(19,0)` | Có |
+| `calculation_snapshot` | `jsonb` | Có |
+| `reading_refs` | `jsonb` |  |
+| `tariff_ref` | `uuid` |  |
+| `created_at` | `timestamp with time zone` | Có |
 
-## 4. Ma trận ánh xạ Quy tắc nghiệp vụ (BR Mapping)
+- `invoice_items_amount_not_null`: `NOT NULL amount`
+- `invoice_items_calculation_snapshot_not_null`: `NOT NULL calculation_snapshot`
+- `invoice_items_created_at_not_null`: `NOT NULL created_at`
+- `invoice_items_id_not_null`: `NOT NULL id`
+- `invoice_items_invoice_id_fkey`: `FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE RESTRICT`
+- `invoice_items_invoice_id_not_null`: `NOT NULL invoice_id`
+- `invoice_items_label_not_null`: `NOT NULL label`
+- `invoice_items_pkey`: `PRIMARY KEY (id)`
+- `invoice_items_quantity_not_null`: `NOT NULL quantity`
+- `invoice_items_tariff_ref_fkey`: `FOREIGN KEY (tariff_ref) REFERENCES tariffs(id) ON DELETE RESTRICT`
+- `invoice_items_type_not_null`: `NOT NULL type`
+- `invoice_items_unit_price_not_null`: `NOT NULL unit_price`
 
-| Quy tắc BR | Bảng / Cột / Ràng buộc bảo đảm |
-|---|---|
-| **BR-005, BR-007** | `numeric(19,0)` cho mọi trường tiền; không dùng float |
-| **BR-006** | `invoice_items.amount` làm tròn HALF_UP đến đồng |
-| **BR-008** | `numeric(18,3)` cho `meter_readings.value`, `consumption_alerts`, `tariffs` |
-| **BR-010** | Mọi FK dùng `ON DELETE RESTRICT`, bảng `active BOOLEAN` |
-| **BR-013** | Bảng `building_staff_assignments(user_id, building_id)` |
-| **BR-016** | Bảng `invites(code_hash, expires_at, consumed_at)` thời hạn 24h |
-| **BR-025** | Cột `users.enabled` |
-| **BR-027** | `rooms.capacity > 0`, `uq_room_building_code` |
-| **BR-029** | `rooms.bookable` quản lý riêng tình trạng cho thuê |
-| **BR-032** | `contracts.status IN ('DRAFT', 'ACTIVE', 'ENDED')` |
-| **BR-035** | `uq_active_room_contract` partial index `WHERE status = 'ACTIVE'` |
-| **BR-036, BR-037** | `contracts`: `actual_checkout_date > actual_start_date` (tối thiểu 1 ngày) |
-| **BR-049** | `invoices`: `uq_invoice_contract_month` trên `(contract_id, billing_month)` |
-| **BR-059** | `meter_readings.value`: Chỉ số cuối kỳ $\ge$ đầu kỳ, kiểm tra tầng application & check constraint |
-| **BR-064, BR-066** | `tariffs`: `uq_building_service_month` trên `(building_id, service_id, effective_month)` |
-| **BR-068** | `invoice_items`: snapshot `quantity`, `unit_price`, `calculation_snapshot`, `reading_refs` |
-| **BR-075, BR-079** | `invoices.status IN ('DRAFT', 'ISSUED')`; `ISSUED` không sửa trực tiếp |
-| **BR-080, BR-081** | Bảng `invoice_adjustments`: `delta_amount <> 0`, lưu `effective_date`, `recorded_at` |
-| **BR-087..BR-090** | Bảng `invoice_ledger_entries`: signed amount, không lưu cached balance |
-| **BR-095..BR-097** | `invoice_ledger_entries.original_entry_id` khi đính chính |
-| **BR-101** | `invoice_ledger_entries.transfer_id` cặp `CREDIT_OUT` / `CREDIT_IN` |
-| **BR-103** | Bảng `financial_operations(idempotency_key, request_hash)` |
-| **BR-109..BR-111** | Bảng `deposit_ledger_entries`: signed amount, hạch toán cọc độc lập |
-| **BR-114** | `deposit_ledger_entries.transfer_id` cặp với `invoice_ledger_entries.transfer_id` (`OFFSET_OUT` / `DEPOSIT_OFFSET_IN`) |
-| **BR-120** | `contracts.deposit_settlement_at`: chỉ kích hoạt khi `status = 'ENDED'` và `depositHeld = 0` |
-| **BR-126** | `maintenance_issues.status IN ('OPEN', 'ACCEPTED', 'IN_PROGRESS', 'RESOLVED', 'CLOSED')` |
-| **BR-130, BR-131** | `stored_files`: `mime_type`, `size <= 5242880`, `storage_key` trong private storage |
-| **BR-136** | `notifications`: `uq_notification_user_event` trên `(user_id, event_key)` |
-| **BR-138..BR-147**| Bảng `consumption_alerts`: lưu snapshot 3 kỳ, trung vị, version chỉ số |
+## invoice_ledger_entries
+
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `invoice_id` | `uuid` | Có |
+| `contract_id` | `uuid` | Có |
+| `entry_type` | `character varying(32)` | Có |
+| `amount` | `numeric(19,0)` | Có |
+| `payment_method` | `character varying(32)` | Có |
+| `reference_code` | `character varying(128)` |  |
+| `note` | `text` |  |
+| `ref_entry_id` | `uuid` |  |
+| `operation_id` | `uuid` |  |
+| `actor_id` | `uuid` | Có |
+| `recorded_at` | `timestamp with time zone` | Có |
+| `effective_date` | `date` | Có |
+
+- `chk_credit_transfer_direction`: `CHECK (((((entry_type)::text <> 'CREDIT_OUT'::text) OR (amount < (0)::numeric)) AND (((entry_type)::text <> 'CREDIT_IN'::text) OR (amount > (0)::numeric))))`
+- `chk_inv_ledger_amount_not_zero`: `CHECK ((amount <> (0)::numeric))`
+- `chk_inv_ledger_entry_type`: `CHECK (((entry_type)::text = ANY ((ARRAY['PAYMENT'::character varying, 'PAYMENT_CORRECTION'::character varying, 'REFUND'::character varying, 'CREDIT_APPLIED'::character varying, 'CREDIT_OUT'::character varying, 'CREDIT_IN'::character varying, 'DEPOSIT_OFFSET'::character varying])::text[])))`
+- `chk_inv_ledger_payment_method`: `CHECK (((payment_method)::text = ANY ((ARRAY['CASH'::character varying, 'BANK_TRANSFER'::character varying, 'MOMO'::character varying, 'VNPAY'::character varying, 'INTERNAL_TRANSFER'::character varying])::text[])))`
+- `invoice_ledger_entries_actor_id_fkey`: `FOREIGN KEY (actor_id) REFERENCES users(id) ON DELETE RESTRICT`
+- `invoice_ledger_entries_actor_id_not_null`: `NOT NULL actor_id`
+- `invoice_ledger_entries_amount_not_null`: `NOT NULL amount`
+- `invoice_ledger_entries_contract_id_fkey`: `FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE RESTRICT`
+- `invoice_ledger_entries_contract_id_not_null`: `NOT NULL contract_id`
+- `invoice_ledger_entries_effective_date_not_null`: `NOT NULL effective_date`
+- `invoice_ledger_entries_entry_type_not_null`: `NOT NULL entry_type`
+- `invoice_ledger_entries_id_not_null`: `NOT NULL id`
+- `invoice_ledger_entries_invoice_id_fkey`: `FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE RESTRICT`
+- `invoice_ledger_entries_invoice_id_not_null`: `NOT NULL invoice_id`
+- `invoice_ledger_entries_operation_id_fkey`: `FOREIGN KEY (operation_id) REFERENCES financial_operations(id) ON DELETE RESTRICT`
+- `invoice_ledger_entries_payment_method_not_null`: `NOT NULL payment_method`
+- `invoice_ledger_entries_pkey`: `PRIMARY KEY (id)`
+- `invoice_ledger_entries_recorded_at_not_null`: `NOT NULL recorded_at`
+- `invoice_ledger_entries_ref_entry_id_fkey`: `FOREIGN KEY (ref_entry_id) REFERENCES invoice_ledger_entries(id) ON DELETE RESTRICT`
+
+## invoice_notes
+
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `invoice_id` | `uuid` | Có |
+| `content` | `text` | Có |
+| `reason` | `text` | Có |
+| `created_by` | `uuid` | Có |
+| `recorded_at` | `timestamp with time zone` | Có |
+
+- `invoice_notes_content_not_null`: `NOT NULL content`
+- `invoice_notes_created_by_fkey`: `FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT`
+- `invoice_notes_created_by_not_null`: `NOT NULL created_by`
+- `invoice_notes_id_not_null`: `NOT NULL id`
+- `invoice_notes_invoice_id_fkey`: `FOREIGN KEY (invoice_id) REFERENCES invoices(id) ON DELETE RESTRICT`
+- `invoice_notes_invoice_id_not_null`: `NOT NULL invoice_id`
+- `invoice_notes_pkey`: `PRIMARY KEY (id)`
+- `invoice_notes_reason_not_null`: `NOT NULL reason`
+- `invoice_notes_recorded_at_not_null`: `NOT NULL recorded_at`
+
+## invoices
+
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `contract_id` | `uuid` | Có |
+| `billing_month` | `character varying(7)` | Có |
+| `status` | `character varying(20)` | Có |
+| `period_start` | `date` | Có |
+| `period_end_exclusive` | `date` | Có |
+| `due_date` | `date` | Có |
+| `issued_at` | `timestamp with time zone` |  |
+| `created_at` | `timestamp with time zone` | Có |
+| `updated_at` | `timestamp with time zone` | Có |
+| `version` | `bigint` | Có |
+
+- `invoices_billing_month_not_null`: `NOT NULL billing_month`
+- `invoices_contract_id_fkey`: `FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE RESTRICT`
+- `invoices_contract_id_not_null`: `NOT NULL contract_id`
+- `invoices_created_at_not_null`: `NOT NULL created_at`
+- `invoices_due_date_not_null`: `NOT NULL due_date`
+- `invoices_id_not_null`: `NOT NULL id`
+- `invoices_period_end_exclusive_not_null`: `NOT NULL period_end_exclusive`
+- `invoices_period_start_not_null`: `NOT NULL period_start`
+- `invoices_pkey`: `PRIMARY KEY (id)`
+- `invoices_status_not_null`: `NOT NULL status`
+- `invoices_updated_at_not_null`: `NOT NULL updated_at`
+- `invoices_version_not_null`: `NOT NULL version`
+- `uq_invoice_contract_month`: `UNIQUE (contract_id, billing_month)`
+
+## issue_status_history
+
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `issue_id` | `uuid` | Có |
+| `old_status` | `character varying(20)` | Có |
+| `new_status` | `character varying(20)` | Có |
+| `comment` | `text` |  |
+| `actor_id` | `uuid` | Có |
+| `created_at` | `timestamp with time zone` | Có |
+
+- `issue_status_history_actor_id_fkey`: `FOREIGN KEY (actor_id) REFERENCES users(id) ON DELETE RESTRICT`
+- `issue_status_history_actor_id_not_null`: `NOT NULL actor_id`
+- `issue_status_history_created_at_not_null`: `NOT NULL created_at`
+- `issue_status_history_id_not_null`: `NOT NULL id`
+- `issue_status_history_issue_id_fkey`: `FOREIGN KEY (issue_id) REFERENCES maintenance_issues(id) ON DELETE CASCADE`
+- `issue_status_history_issue_id_not_null`: `NOT NULL issue_id`
+- `issue_status_history_new_status_not_null`: `NOT NULL new_status`
+- `issue_status_history_old_status_not_null`: `NOT NULL old_status`
+- `issue_status_history_pkey`: `PRIMARY KEY (id)`
+
+## maintenance_issues
+
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `contract_id` | `uuid` | Có |
+| `room_id` | `uuid` | Có |
+| `title` | `character varying(150)` | Có |
+| `description` | `text` | Có |
+| `status` | `character varying(20)` | Có |
+| `assignee_id` | `uuid` |  |
+| `created_by` | `uuid` | Có |
+| `created_at` | `timestamp with time zone` | Có |
+| `updated_at` | `timestamp with time zone` | Có |
+| `version` | `bigint` | Có |
+
+- `chk_issue_status`: `CHECK (((status)::text = ANY ((ARRAY['OPEN'::character varying, 'ACCEPTED'::character varying, 'IN_PROGRESS'::character varying, 'RESOLVED'::character varying, 'CLOSED'::character varying])::text[])))`
+- `maintenance_issues_assignee_id_fkey`: `FOREIGN KEY (assignee_id) REFERENCES users(id) ON DELETE SET NULL`
+- `maintenance_issues_contract_id_fkey`: `FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE RESTRICT`
+- `maintenance_issues_contract_id_not_null`: `NOT NULL contract_id`
+- `maintenance_issues_created_at_not_null`: `NOT NULL created_at`
+- `maintenance_issues_created_by_fkey`: `FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT`
+- `maintenance_issues_created_by_not_null`: `NOT NULL created_by`
+- `maintenance_issues_description_not_null`: `NOT NULL description`
+- `maintenance_issues_id_not_null`: `NOT NULL id`
+- `maintenance_issues_pkey`: `PRIMARY KEY (id)`
+- `maintenance_issues_room_id_fkey`: `FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE RESTRICT`
+- `maintenance_issues_room_id_not_null`: `NOT NULL room_id`
+- `maintenance_issues_status_not_null`: `NOT NULL status`
+- `maintenance_issues_title_not_null`: `NOT NULL title`
+- `maintenance_issues_updated_at_not_null`: `NOT NULL updated_at`
+- `maintenance_issues_version_not_null`: `NOT NULL version`
+
+## meter_readings
+
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `meter_id` | `uuid` | Có |
+| `reading_date` | `date` | Có |
+| `value` | `numeric(18,3)` | Có |
+| `kind` | `character varying(20)` | Có |
+| `file_id` | `uuid` |  |
+| `created_by` | `uuid` | Có |
+| `created_at` | `timestamp with time zone` | Có |
+| `updated_at` | `timestamp with time zone` | Có |
+| `version` | `bigint` | Có |
+
+- `meter_readings_created_at_not_null`: `NOT NULL created_at`
+- `meter_readings_created_by_fkey`: `FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT`
+- `meter_readings_created_by_not_null`: `NOT NULL created_by`
+- `meter_readings_id_not_null`: `NOT NULL id`
+- `meter_readings_kind_not_null`: `NOT NULL kind`
+- `meter_readings_meter_id_fkey`: `FOREIGN KEY (meter_id) REFERENCES room_meters(id) ON DELETE RESTRICT`
+- `meter_readings_meter_id_not_null`: `NOT NULL meter_id`
+- `meter_readings_pkey`: `PRIMARY KEY (id)`
+- `meter_readings_reading_date_not_null`: `NOT NULL reading_date`
+- `meter_readings_updated_at_not_null`: `NOT NULL updated_at`
+- `meter_readings_value_check`: `CHECK ((value >= (0)::numeric))`
+- `meter_readings_value_not_null`: `NOT NULL value`
+- `meter_readings_version_not_null`: `NOT NULL version`
+
+## notifications
+
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `user_id` | `uuid` | Có |
+| `event_key` | `character varying(100)` | Có |
+| `type` | `character varying(50)` | Có |
+| `title` | `character varying(150)` | Có |
+| `message` | `text` | Có |
+| `resource_type` | `character varying(50)` |  |
+| `resource_id` | `uuid` |  |
+| `read_at` | `timestamp with time zone` |  |
+| `created_at` | `timestamp with time zone` | Có |
+
+- `notifications_created_at_not_null`: `NOT NULL created_at`
+- `notifications_event_key_not_null`: `NOT NULL event_key`
+- `notifications_id_not_null`: `NOT NULL id`
+- `notifications_message_not_null`: `NOT NULL message`
+- `notifications_pkey`: `PRIMARY KEY (id)`
+- `notifications_title_not_null`: `NOT NULL title`
+- `notifications_type_not_null`: `NOT NULL type`
+- `notifications_user_id_fkey`: `FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE`
+- `notifications_user_id_not_null`: `NOT NULL user_id`
+- `uq_notification_user_event`: `UNIQUE (user_id, event_key)`
+
+## one_off_charges
+
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `contract_id` | `uuid` | Có |
+| `billing_month` | `character varying(7)` | Có |
+| `label` | `character varying(100)` | Có |
+| `amount` | `numeric(19,0)` | Có |
+| `reason` | `text` | Có |
+| `source_ref` | `character varying(100)` |  |
+| `created_at` | `timestamp with time zone` | Có |
+
+- `one_off_charges_amount_check`: `CHECK ((amount >= (0)::numeric))`
+- `one_off_charges_amount_not_null`: `NOT NULL amount`
+- `one_off_charges_billing_month_not_null`: `NOT NULL billing_month`
+- `one_off_charges_contract_id_fkey`: `FOREIGN KEY (contract_id) REFERENCES contracts(id) ON DELETE RESTRICT`
+- `one_off_charges_contract_id_not_null`: `NOT NULL contract_id`
+- `one_off_charges_created_at_not_null`: `NOT NULL created_at`
+- `one_off_charges_id_not_null`: `NOT NULL id`
+- `one_off_charges_label_not_null`: `NOT NULL label`
+- `one_off_charges_pkey`: `PRIMARY KEY (id)`
+- `one_off_charges_reason_not_null`: `NOT NULL reason`
+
+## refresh_tokens
+
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `session_id` | `uuid` | Có |
+| `token_hash` | `character varying(255)` | Có |
+| `issued_at` | `timestamp with time zone` | Có |
+| `used_at` | `timestamp with time zone` |  |
+| `replaced_by_id` | `uuid` |  |
+| `expires_at` | `timestamp with time zone` | Có |
+
+- `refresh_tokens_expires_at_not_null`: `NOT NULL expires_at`
+- `refresh_tokens_id_not_null`: `NOT NULL id`
+- `refresh_tokens_issued_at_not_null`: `NOT NULL issued_at`
+- `refresh_tokens_pkey`: `PRIMARY KEY (id)`
+- `refresh_tokens_replaced_by_id_fkey`: `FOREIGN KEY (replaced_by_id) REFERENCES refresh_tokens(id) ON DELETE RESTRICT`
+- `refresh_tokens_session_id_fkey`: `FOREIGN KEY (session_id) REFERENCES auth_sessions(id) ON DELETE RESTRICT`
+- `refresh_tokens_session_id_not_null`: `NOT NULL session_id`
+- `refresh_tokens_token_hash_not_null`: `NOT NULL token_hash`
+
+## room_meters
+
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `room_id` | `uuid` | Có |
+| `type` | `character varying(20)` | Có |
+| `serial` | `character varying(50)` | Có |
+| `installed_on` | `date` | Có |
+| `initial_reading` | `numeric(18,3)` | Có |
+| `active` | `boolean` | Có |
+| `created_at` | `timestamp with time zone` | Có |
+| `updated_at` | `timestamp with time zone` | Có |
+| `version` | `bigint` | Có |
+
+- `room_meters_active_not_null`: `NOT NULL active`
+- `room_meters_created_at_not_null`: `NOT NULL created_at`
+- `room_meters_id_not_null`: `NOT NULL id`
+- `room_meters_initial_reading_not_null`: `NOT NULL initial_reading`
+- `room_meters_installed_on_not_null`: `NOT NULL installed_on`
+- `room_meters_pkey`: `PRIMARY KEY (id)`
+- `room_meters_room_id_fkey`: `FOREIGN KEY (room_id) REFERENCES rooms(id) ON DELETE RESTRICT`
+- `room_meters_room_id_not_null`: `NOT NULL room_id`
+- `room_meters_serial_not_null`: `NOT NULL serial`
+- `room_meters_type_not_null`: `NOT NULL type`
+- `room_meters_updated_at_not_null`: `NOT NULL updated_at`
+- `room_meters_version_not_null`: `NOT NULL version`
+- `uq_room_meter_type`: `UNIQUE (room_id, type)`
+
+## rooms
+
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `building_id` | `uuid` | Có |
+| `floor_id` | `uuid` |  |
+| `room_number` | `character varying(50)` | Có |
+| `base_price` | `numeric(19,0)` | Có |
+| `deposit_amount` | `numeric(19,0)` | Có |
+| `area` | `numeric(8,2)` |  |
+| `max_tenants` | `integer` | Có |
+| `bookable` | `boolean` | Có |
+| `status` | `character varying(30)` | Có |
+| `created_at` | `timestamp with time zone` | Có |
+| `updated_at` | `timestamp with time zone` | Có |
+| `version` | `bigint` | Có |
+
+- `chk_room_status`: `CHECK (((status)::text = ANY ((ARRAY['VACANT'::character varying, 'RENTED'::character varying, 'DEPOSIT_RESERVED'::character varying, 'MAINTENANCE'::character varying])::text[])))`
+- `rooms_base_price_not_null`: `NOT NULL base_price`
+- `rooms_bookable_not_null`: `NOT NULL bookable`
+- `rooms_building_id_fkey`: `FOREIGN KEY (building_id) REFERENCES buildings(id) ON DELETE RESTRICT`
+- `rooms_building_id_not_null`: `NOT NULL building_id`
+- `rooms_created_at_not_null`: `NOT NULL created_at`
+- `rooms_deposit_amount_not_null`: `NOT NULL deposit_amount`
+- `rooms_floor_id_fkey`: `FOREIGN KEY (floor_id) REFERENCES floors(id) ON DELETE RESTRICT`
+- `rooms_id_not_null`: `NOT NULL id`
+- `rooms_max_tenants_not_null`: `NOT NULL max_tenants`
+- `rooms_pkey`: `PRIMARY KEY (id)`
+- `rooms_room_number_not_null`: `NOT NULL room_number`
+- `rooms_status_not_null`: `NOT NULL status`
+- `rooms_updated_at_not_null`: `NOT NULL updated_at`
+- `rooms_version_not_null`: `NOT NULL version`
+- `uq_building_room_number`: `UNIQUE (building_id, room_number)`
+
+## service_definitions
+
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `name` | `character varying(100)` | Có |
+| `unit` | `character varying(20)` | Có |
+| `calculation_type` | `character varying(30)` | Có |
+| `active` | `boolean` | Có |
+| `created_at` | `timestamp with time zone` | Có |
+| `updated_at` | `timestamp with time zone` | Có |
+| `version` | `bigint` | Có |
+
+- `service_definitions_active_not_null`: `NOT NULL active`
+- `service_definitions_calculation_type_not_null`: `NOT NULL calculation_type`
+- `service_definitions_created_at_not_null`: `NOT NULL created_at`
+- `service_definitions_id_not_null`: `NOT NULL id`
+- `service_definitions_name_not_null`: `NOT NULL name`
+- `service_definitions_pkey`: `PRIMARY KEY (id)`
+- `service_definitions_unit_not_null`: `NOT NULL unit`
+- `service_definitions_updated_at_not_null`: `NOT NULL updated_at`
+- `service_definitions_version_not_null`: `NOT NULL version`
+
+## stored_files
+
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `storage_key` | `character varying(255)` | Có |
+| `original_name` | `character varying(255)` | Có |
+| `mime_type` | `character varying(100)` | Có |
+| `size` | `bigint` | Có |
+| `uploaded_by` | `uuid` | Có |
+| `parent_type` | `character varying(50)` | Có |
+| `parent_id` | `uuid` |  |
+| `status` | `character varying(20)` | Có |
+| `created_at` | `timestamp with time zone` | Có |
+
+- `chk_stored_file_mime`: `CHECK (((mime_type)::text = ANY ((ARRAY['image/jpeg'::character varying, 'image/png'::character varying, 'image/webp'::character varying])::text[])))`
+- `chk_stored_file_parent_type`: `CHECK (((parent_type)::text = ANY ((ARRAY['METER_READING'::character varying, 'MAINTENANCE_ISSUE'::character varying, 'INVOICE_FEEDBACK'::character varying])::text[])))`
+- `chk_stored_file_size`: `CHECK (((size > 0) AND (size <= 5242880)))`
+- `stored_files_created_at_not_null`: `NOT NULL created_at`
+- `stored_files_id_not_null`: `NOT NULL id`
+- `stored_files_mime_type_not_null`: `NOT NULL mime_type`
+- `stored_files_original_name_not_null`: `NOT NULL original_name`
+- `stored_files_parent_type_not_null`: `NOT NULL parent_type`
+- `stored_files_pkey`: `PRIMARY KEY (id)`
+- `stored_files_size_not_null`: `NOT NULL size`
+- `stored_files_status_not_null`: `NOT NULL status`
+- `stored_files_storage_key_key`: `UNIQUE (storage_key)`
+- `stored_files_storage_key_not_null`: `NOT NULL storage_key`
+- `stored_files_uploaded_by_fkey`: `FOREIGN KEY (uploaded_by) REFERENCES users(id) ON DELETE RESTRICT`
+- `stored_files_uploaded_by_not_null`: `NOT NULL uploaded_by`
+
+## tariffs
+
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `building_id` | `uuid` | Có |
+| `service_id` | `uuid` | Có |
+| `effective_month` | `character varying(7)` | Có |
+| `unit_price` | `numeric(19,0)` | Có |
+| `created_at` | `timestamp with time zone` | Có |
+| `updated_at` | `timestamp with time zone` | Có |
+| `version` | `bigint` | Có |
+
+- `tariffs_building_id_fkey`: `FOREIGN KEY (building_id) REFERENCES buildings(id) ON DELETE RESTRICT`
+- `tariffs_building_id_not_null`: `NOT NULL building_id`
+- `tariffs_created_at_not_null`: `NOT NULL created_at`
+- `tariffs_effective_month_not_null`: `NOT NULL effective_month`
+- `tariffs_id_not_null`: `NOT NULL id`
+- `tariffs_pkey`: `PRIMARY KEY (id)`
+- `tariffs_service_id_fkey`: `FOREIGN KEY (service_id) REFERENCES service_definitions(id) ON DELETE RESTRICT`
+- `tariffs_service_id_not_null`: `NOT NULL service_id`
+- `tariffs_unit_price_check`: `CHECK ((unit_price >= (0)::numeric))`
+- `tariffs_unit_price_not_null`: `NOT NULL unit_price`
+- `tariffs_updated_at_not_null`: `NOT NULL updated_at`
+- `tariffs_version_not_null`: `NOT NULL version`
+- `uq_building_service_month`: `UNIQUE (building_id, service_id, effective_month)`
+
+## tenant_profiles
+
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `user_id` | `uuid` |  |
+| `full_name` | `character varying(100)` | Có |
+| `phone` | `character varying(20)` | Có |
+| `citizen_id_masked` | `character varying(20)` | Có |
+| `email` | `character varying(100)` |  |
+| `created_at` | `timestamp with time zone` | Có |
+| `updated_at` | `timestamp with time zone` | Có |
+| `version` | `bigint` | Có |
+| `created_by` | `uuid` |  |
+
+- `tenant_profiles_citizen_id_masked_not_null`: `NOT NULL citizen_id_masked`
+- `tenant_profiles_created_at_not_null`: `NOT NULL created_at`
+- `tenant_profiles_created_by_fkey`: `FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE RESTRICT`
+- `tenant_profiles_full_name_not_null`: `NOT NULL full_name`
+- `tenant_profiles_id_not_null`: `NOT NULL id`
+- `tenant_profiles_phone_not_null`: `NOT NULL phone`
+- `tenant_profiles_pkey`: `PRIMARY KEY (id)`
+- `tenant_profiles_updated_at_not_null`: `NOT NULL updated_at`
+- `tenant_profiles_user_id_fkey`: `FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE RESTRICT`
+- `tenant_profiles_version_not_null`: `NOT NULL version`
+
+## users
+
+| Cột | Kiểu | NOT NULL |
+|---|---|---|
+| `id` | `uuid` | Có |
+| `login` | `character varying(50)` | Có |
+| `password_hash` | `character varying(255)` | Có |
+| `role` | `character varying(20)` | Có |
+| `enabled` | `boolean` | Có |
+| `created_at` | `timestamp with time zone` | Có |
+| `updated_at` | `timestamp with time zone` | Có |
+| `version` | `bigint` | Có |
+
+- `users_created_at_not_null`: `NOT NULL created_at`
+- `users_enabled_not_null`: `NOT NULL enabled`
+- `users_id_not_null`: `NOT NULL id`
+- `users_login_key`: `UNIQUE (login)`
+- `users_login_not_null`: `NOT NULL login`
+- `users_password_hash_not_null`: `NOT NULL password_hash`
+- `users_pkey`: `PRIMARY KEY (id)`
+- `users_role_check`: `CHECK (((role)::text = ANY ((ARRAY['OWNER'::character varying, 'STAFF'::character varying, 'TENANT'::character varying])::text[])))`
+- `users_role_not_null`: `NOT NULL role`
+- `users_updated_at_not_null`: `NOT NULL updated_at`
+- `users_version_not_null`: `NOT NULL version`

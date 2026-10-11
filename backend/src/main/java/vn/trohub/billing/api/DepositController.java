@@ -34,7 +34,7 @@ public class DepositController {
     @PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
     public ResponseEntity<ApiResponse<ContractDepositFinancialStatusResponse>> recordReceipt(
             @Valid @RequestBody RecordDepositReceiptRequest request,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader("X-Idempotency-Key") String idempotencyKey,
             @AuthenticationPrincipal UserPrincipal principal) {
         ContractDepositFinancialStatusResponse response = depositService.recordDepositReceipt(request, principal, idempotencyKey);
         return ResponseEntity.ok(ApiResponse.ok(response));
@@ -44,7 +44,7 @@ public class DepositController {
     @PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
     public ResponseEntity<ApiResponse<ContractDepositFinancialStatusResponse>> correctReceipt(
             @Valid @RequestBody CorrectDepositReceiptRequest request,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader("X-Idempotency-Key") String idempotencyKey,
             @AuthenticationPrincipal UserPrincipal principal) {
         ContractDepositFinancialStatusResponse response = depositService.correctDepositReceipt(request, principal, idempotencyKey);
         return ResponseEntity.ok(ApiResponse.ok(response));
@@ -54,7 +54,7 @@ public class DepositController {
     @PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
     public ResponseEntity<ApiResponse<ContractDepositFinancialStatusResponse>> refundDeposit(
             @Valid @RequestBody RefundDepositRequest request,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader("X-Idempotency-Key") String idempotencyKey,
             @AuthenticationPrincipal UserPrincipal principal) {
         ContractDepositFinancialStatusResponse response = depositService.refundDeposit(request, principal, idempotencyKey);
         return ResponseEntity.ok(ApiResponse.ok(response));
@@ -64,7 +64,7 @@ public class DepositController {
     @PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
     public ResponseEntity<ApiResponse<ContractDepositFinancialStatusResponse>> deductDeposit(
             @Valid @RequestBody DeductDepositRequest request,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader("X-Idempotency-Key") String idempotencyKey,
             @AuthenticationPrincipal UserPrincipal principal) {
         ContractDepositFinancialStatusResponse response = depositService.deductDeposit(request, principal, idempotencyKey);
         return ResponseEntity.ok(ApiResponse.ok(response));
@@ -74,7 +74,7 @@ public class DepositController {
     @PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
     public ResponseEntity<ApiResponse<ContractDepositFinancialStatusResponse>> offsetDepositToInvoice(
             @Valid @RequestBody OffsetDepositToInvoiceRequest request,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader("X-Idempotency-Key") String idempotencyKey,
             @AuthenticationPrincipal UserPrincipal principal) {
         ContractDepositFinancialStatusResponse response = depositService.offsetDepositToInvoice(request, principal, idempotencyKey);
         return ResponseEntity.ok(ApiResponse.ok(response));
@@ -84,7 +84,7 @@ public class DepositController {
     @PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
     public ResponseEntity<ApiResponse<ContractDepositFinancialStatusResponse>> settleDeposit(
             @Valid @RequestBody SettleDepositRequest request,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader("X-Idempotency-Key") String idempotencyKey,
             @AuthenticationPrincipal UserPrincipal principal) {
         ContractDepositFinancialStatusResponse response = depositService.settleDeposit(request, principal, idempotencyKey);
         return ResponseEntity.ok(ApiResponse.ok(response));

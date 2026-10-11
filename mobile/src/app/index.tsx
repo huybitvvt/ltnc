@@ -11,11 +11,13 @@ import { ContractsScreen } from '@/features/contracts/ContractsScreen';
 import { MeteringScreen } from '@/features/metering/MeteringScreen';
 import { InvoicesScreen } from '@/features/invoices/InvoicesScreen';
 import { IncidentsScreen } from '@/features/operations/IncidentsScreen';
+import { UsersScreen } from '@/features/users/UsersScreen';
+import { AuditScreen } from '@/features/audit/AuditScreen';
 
 export default function IndexScreen() {
   const { isAuthenticated, isLoading } = useMobileAuth();
-  const [authView, setAuthView] = useState<'LOGIN' | 'ACTIVATE'>('LOGIN');
-  const [mainView, setMainView] = useState<'HOME' | 'STATUS' | 'PROPERTY' | 'CONTRACTS' | 'METERING' | 'INVOICES' | 'INCIDENTS'>('HOME');
+  const [authView, setAuthView] = useState<'LOGIN' | 'ACTIVATE' | 'RESET'>('LOGIN');
+  const [mainView, setMainView] = useState<'HOME' | 'STATUS' | 'PROPERTY' | 'CONTRACTS' | 'METERING' | 'INVOICES' | 'INCIDENTS' | 'USERS' | 'AUDIT'>('HOME');
 
   if (isLoading) {
     return (
@@ -27,15 +29,17 @@ export default function IndexScreen() {
   }
 
   if (!isAuthenticated) {
-    if (authView === 'ACTIVATE') {
-      return <ActivateScreen onNavigateToLogin={() => setAuthView('LOGIN')} />;
+    if (authView === 'ACTIVATE' || authView === 'RESET') {
+      return <ActivateScreen reset={authView === 'RESET'} onNavigateToLogin={() => setAuthView('LOGIN')} />;
     }
-    return <LoginScreen onNavigateToActivate={() => setAuthView('ACTIVATE')} />;
+    return <LoginScreen onNavigateToActivate={() => setAuthView('ACTIVATE')} onNavigateToReset={() => setAuthView('RESET')} />;
   }
 
   if (mainView === 'STATUS') {
     return <MobileStatusScreen onBack={() => setMainView('HOME')} />;
   }
+  if (mainView === 'USERS') return <UsersScreen onBack={() => setMainView('HOME')} />;
+  if (mainView === 'AUDIT') return <AuditScreen onBack={() => setMainView('HOME')} />;
 
   if (mainView === 'PROPERTY') {
     return <PropertyScreen onBack={() => setMainView('HOME')} />;
@@ -65,6 +69,8 @@ export default function IndexScreen() {
       onNavigateToMetering={() => setMainView('METERING')}
       onNavigateToInvoices={() => setMainView('INVOICES')}
       onNavigateToIncidents={() => setMainView('INCIDENTS')}
+      onNavigateToUsers={() => setMainView('USERS')}
+      onNavigateToAudit={() => setMainView('AUDIT')}
     />
   );
 }

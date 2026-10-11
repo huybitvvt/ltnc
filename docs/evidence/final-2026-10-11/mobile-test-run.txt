@@ -1,0 +1,11 @@
+> trohub-mobile@1.0.0 test:run
+> jest --runInBand
+
+PASS src/shared/money.test.ts
+PASS src/shared/date.test.ts
+
+Test Suites: 2 passed, 2 total
+Tests:       2 passed, 2 total
+Snapshots:   0 total
+Time:        1.656 s, estimated 2 s
+Ran all test suites.

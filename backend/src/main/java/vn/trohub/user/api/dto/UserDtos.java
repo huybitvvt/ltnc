@@ -13,12 +13,14 @@ public class UserDtos {
             @Size(min = 3, max = 50, message = "Tên đăng nhập từ 3 đến 50 ký tự")
             String login,
 
-            @NotBlank(message = "Mật khẩu không được để trống")
             @Size(min = 6, message = "Mật khẩu tối thiểu 6 ký tự")
             String password,
 
             List<UUID> buildingIds
     ) {}
+
+    public record StaffInviteResponse(UUID id, String login, vn.trohub.user.domain.UserRole role,
+                                     boolean enabled, String inviteCode) {}
 
     public record UpdateUserStatusRequest(
             boolean enabled

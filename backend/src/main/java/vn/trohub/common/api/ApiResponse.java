@@ -4,6 +4,11 @@ import java.util.Map;
 
 public record ApiResponse<T>(T data, Map<String, Object> meta) {
 
+    @com.fasterxml.jackson.annotation.JsonProperty("success")
+    public boolean getSuccess() {
+        return true;
+    }
+
     public static <T> ApiResponse<T> of(T data) {
         return new ApiResponse<>(data, Map.of("traceId", java.util.UUID.randomUUID().toString()));
     }

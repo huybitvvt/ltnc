@@ -55,6 +55,11 @@ public class InvoiceLedgerEntry {
 
     @Column(name = "recorded_at", nullable = false, updatable = false)
     private Instant recordedAt = Instant.now();
+    @Column(name = "effective_date", nullable = false, updatable = false)
+    private java.time.LocalDate effectiveDate = java.time.LocalDate.now(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
+
+    public java.time.LocalDate getEffectiveDate() { return effectiveDate; }
+    public void setEffectiveDate(java.time.LocalDate date) { this.effectiveDate = date; }
 
     public InvoiceLedgerEntry() {}
 

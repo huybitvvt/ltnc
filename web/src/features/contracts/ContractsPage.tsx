@@ -1,3 +1,5 @@
+import { todayInVietnam } from '../../shared/date';
+import { isMoney, formatMoney } from '../../shared/money';
 import React, { useEffect, useState } from 'react';
 import {
   Alert,
@@ -67,7 +69,7 @@ export const ContractsPage: React.FC = () => {
   const [availableRooms, setAvailableRooms] = useState<RoomItem[]>([]);
   const [selectedRoomId, setSelectedRoomId] = useState<string>('');
   const [selectedTenantId, setSelectedTenantId] = useState<string>('');
-  const [startDate, setStartDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState<string>(todayInVietnam());
   const [endDate, setEndDate] = useState<string>(
     new Date(Date.now() + 180 * 24 * 3600 * 1000).toISOString().split('T')[0]
   );
@@ -143,7 +145,7 @@ export const ContractsPage: React.FC = () => {
 
   // Trả phòng & Bàn giao (Checkout Wizard)
   const [checkoutOpen, setCheckoutOpen] = useState(false);
-  const [checkoutDate, setCheckoutDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [checkoutDate, setCheckoutDate] = useState<string>(todayInVietnam());
   const [checkoutElec, setCheckoutElec] = useState<string>('0.000');
   const [checkoutWater, setCheckoutWater] = useState<string>('0.000');
   const [checkoutLoading, setCheckoutLoading] = useState(false);
@@ -151,7 +153,7 @@ export const ContractsPage: React.FC = () => {
   // Thêm thành viên (Add member)
   const [addMemberOpen, setAddMemberOpen] = useState(false);
   const [memberTenantId, setMemberTenantId] = useState<string>('');
-  const [memberJoinedDate, setMemberJoinedDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [memberJoinedDate, setMemberJoinedDate] = useState<string>(todayInVietnam());
 
   // Cấp mã mời
   const [inviteCodeInfo, setInviteCodeInfo] = useState<{ code: string; expiresAt: string } | null>(null);
@@ -360,8 +362,8 @@ export const ContractsPage: React.FC = () => {
   // --- Thao tác Cọc ---
   const handleRecordReceipt = async () => {
     if (!activeContract) return;
-    const amountNum = parseFloat(receiptAmount);
-    if (isNaN(amountNum) || amountNum <= 0) {
+    const amountNum = receiptAmount;
+    if (!isMoney(amountNum, false) || BigInt(amountNum) <= 0n) {
       alert('Số tiền thu cọc phải lớn hơn 0');
       return;
     }
@@ -393,8 +395,8 @@ export const ContractsPage: React.FC = () => {
 
   const handleCorrectReceipt = async () => {
     if (!selectedDepositEntry || !activeContract) return;
-    const deltaNum = parseFloat(correctDelta);
-    if (isNaN(deltaNum) || deltaNum === 0) {
+    const deltaNum = correctDelta;
+    if (!isMoney(deltaNum, true) || BigInt(deltaNum) === 0n) {
       alert('Số tiền delta điều chỉnh phải khác 0');
       return;
     }
@@ -427,8 +429,8 @@ export const ContractsPage: React.FC = () => {
 
   const handleRefundDeposit = async () => {
     if (!activeContract) return;
-    const amountNum = parseFloat(refundAmount);
-    if (isNaN(amountNum) || amountNum <= 0) {
+    const amountNum = refundAmount;
+    if (!isMoney(amountNum, false) || BigInt(amountNum) <= 0n) {
       alert('Số tiền hoàn phải lớn hơn 0');
       return;
     }
@@ -463,8 +465,8 @@ export const ContractsPage: React.FC = () => {
 
   const handleDeductDeposit = async () => {
     if (!activeContract) return;
-    const amountNum = parseFloat(deductAmount);
-    if (isNaN(amountNum) || amountNum <= 0) {
+    const amountNum = deductAmount;
+    if (!isMoney(amountNum, false) || BigInt(amountNum) <= 0n) {
       alert('Số tiền khấu trừ phải lớn hơn 0');
       return;
     }
@@ -500,14 +502,13 @@ export const ContractsPage: React.FC = () => {
     if (!activeContract) return;
     try {
       const invData = await invoicesApi.listInvoices({ contractId: activeContract.id, status: 'ISSUED' });
-      const unpaidInvs = (invData.content || []).filter((i: any) => parseFloat(i.debt) > 0);
+      const unpaidInvs = (invData.content || []).filter((i: any) => BigInt(i.debt) > 0);
       setContractInvoices(unpaidInvs);
       if (unpaidInvs.length > 0) {
         setOffsetInvoiceId(unpaidInvs[0].id);
-        const maxOffset = Math.min(
-          parseFloat(depositData?.depositHeld || '0'),
-          parseFloat(unpaidInvs[0].debt)
-        );
+        const held = BigInt(depositData?.depositHeld || '0');
+        const debt = BigInt(unpaidInvs[0].debt);
+        const maxOffset = held < debt ? held : debt;
         setOffsetAmount(String(maxOffset));
       } else {
         setOffsetInvoiceId('');
@@ -521,8 +522,8 @@ export const ContractsPage: React.FC = () => {
 
   const handleOffsetToInvoice = async () => {
     if (!activeContract || !offsetInvoiceId) return;
-    const amountNum = parseFloat(offsetAmount);
-    if (isNaN(amountNum) || amountNum <= 0) {
+    const amountNum = offsetAmount;
+    if (!isMoney(amountNum, false) || BigInt(amountNum) <= 0n) {
       alert('Số tiền bù cọc phải lớn hơn 0');
       return;
     }
@@ -573,7 +574,7 @@ export const ContractsPage: React.FC = () => {
 
   const handleOpenCheckout = () => {
     if (!activeContract) return;
-    setCheckoutDate(new Date().toISOString().split('T')[0]);
+    setCheckoutDate(todayInVietnam());
     const elecMeter = roomMeters.find((m) => m.type === 'ELECTRICITY');
     const waterMeter = roomMeters.find((m) => m.type === 'WATER');
     setCheckoutElec(elecMeter?.initialReading || '0.000');
@@ -620,11 +621,6 @@ export const ContractsPage: React.FC = () => {
     } finally {
       setCheckoutLoading(false);
     }
-  };
-
-  const formatMoney = (val?: string) => {
-    if (!val) return '0 ₫';
-    return Number(val).toLocaleString('vi-VN') + ' ₫';
   };
 
   const getStatusChip = (status: string) => {
@@ -1200,7 +1196,7 @@ export const ContractsPage: React.FC = () => {
                             Thu Tiền Cọc
                           </Button>
 
-                          {parseFloat(depositData?.depositHeld || '0') > 0 && (
+                          {BigInt(depositData?.depositHeld || '0') > 0 && (
                             <>
                               <Button
                                 variant="outlined"
@@ -1235,7 +1231,7 @@ export const ContractsPage: React.FC = () => {
                           )}
 
                           {activeContract.status === 'ENDED' &&
-                            parseFloat(depositData?.depositHeld || '0') === 0 && (
+                            BigInt(depositData?.depositHeld || '0') === 0n && (
                               <Button
                                 variant="contained"
                                 color="success"
@@ -1274,7 +1270,7 @@ export const ContractsPage: React.FC = () => {
                             </TableHead>
                             <TableBody>
                               {depositData.entries.map((entry) => {
-                                const isNeg = parseFloat(entry.amount) < 0;
+                                const isNeg = BigInt(entry.amount) < 0;
                                 return (
                                   <TableRow key={entry.id} hover>
                                     <TableCell>
@@ -1490,8 +1486,6 @@ export const ContractsPage: React.FC = () => {
           >
             <MenuItem value="BANK_TRANSFER">Chuyển khoản ngân hàng</MenuItem>
             <MenuItem value="CASH">Tiền mặt</MenuItem>
-            <MenuItem value="MOMO">Ví MoMo</MenuItem>
-            <MenuItem value="VNPAY">VNPAY</MenuItem>
           </TextField>
           <TextField
             fullWidth
@@ -1666,10 +1660,9 @@ export const ContractsPage: React.FC = () => {
                   setOffsetInvoiceId(e.target.value);
                   const selectedInv = contractInvoices.find((inv) => inv.id === e.target.value);
                   if (selectedInv) {
-                    const maxOffset = Math.min(
-                      parseFloat(depositData?.depositHeld || '0'),
-                      parseFloat(selectedInv.debt)
-                    );
+                    const held = BigInt(depositData?.depositHeld || '0');
+        const debt = BigInt(selectedInv.debt);
+        const maxOffset = held < debt ? held : debt;
                     setOffsetAmount(String(maxOffset));
                   }
                 }}

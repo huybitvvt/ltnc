@@ -1,3 +1,5 @@
+import { todayInVietnam } from '../../shared/date';
+import { isMoney, formatMoney } from '../../shared/money';
 import React, { useState, useEffect } from 'react';
 import {
   Box,
@@ -26,18 +28,16 @@ import {
   Grid,
   Tooltip,
 } from '@mui/material';
-import {
-  Add as AddIcon,
-  Visibility as ViewIcon,
-  CheckCircle as IssueIcon,
-  Edit as AdjustIcon,
-  NoteAdd as NoteIcon,
-  Refresh as RefreshIcon,
-  Payment as PaymentIcon,
-  Undo as UndoIcon,
-  AssignmentReturn as RefundIcon,
-  SwapHoriz as TransferIcon,
-} from '@mui/icons-material';
+import AddIcon from '@mui/icons-material/Add';
+import ViewIcon from '@mui/icons-material/Visibility';
+import IssueIcon from '@mui/icons-material/CheckCircle';
+import AdjustIcon from '@mui/icons-material/Edit';
+import NoteIcon from '@mui/icons-material/NoteAdd';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import PaymentIcon from '@mui/icons-material/Payment';
+import UndoIcon from '@mui/icons-material/Undo';
+import RefundIcon from '@mui/icons-material/AssignmentReturn';
+import TransferIcon from '@mui/icons-material/SwapHoriz';
 import { useAuth } from '../auth/AuthContext';
 import { invoicesApi } from './invoicesApi';
 import { contractsApi } from '../contracts/contractsApi';
@@ -85,7 +85,7 @@ export const InvoicesPage: React.FC = () => {
   const [adjustOpen, setAdjustOpen] = useState(false);
   const [adjustDelta, setAdjustDelta] = useState('');
   const [adjustReason, setAdjustReason] = useState('');
-  const [adjustDate, setAdjustDate] = useState(new Date().toISOString().slice(0, 10));
+  const [adjustDate, setAdjustDate] = useState(todayInVietnam());
 
   // Modal: Note
   const [noteOpen, setNoteOpen] = useState(false);
@@ -280,29 +280,37 @@ export const InvoicesPage: React.FC = () => {
   };
 
   // Payment Handlers
-  const handleOpenPayment = (inv: InvoiceSummary | InvoiceDetail) => {
-    setSelectedInvoice(inv as any);
-    setPaymentAmount(inv.debt && Number(inv.debt) > 0 ? inv.debt : '');
-    setPaymentMethod('BANK_TRANSFER');
-    setPaymentRefCode('');
-    setPaymentNote('');
-    setPaymentOpen(true);
+  const handleOpenPayment = async (inv: InvoiceSummary | InvoiceDetail) => {
+    setActionLoading(true);
+    try {
+      const detail = 'items' in inv ? inv : await invoicesApi.getInvoice(inv.id);
+      setSelectedInvoice(detail);
+      setPaymentAmount(BigInt(detail.debt || '0') > 0n ? detail.debt : '');
+      setPaymentMethod('BANK_TRANSFER');
+      setPaymentRefCode('');
+      setPaymentNote('');
+      setPaymentOpen(true);
+    } catch (err: any) {
+      alert(err.response?.data?.error?.message || 'Không thể tải hóa đơn để ghi thu');
+    } finally { setActionLoading(false); }
   };
 
   const handleRecordPayment = async () => {
     if (!selectedInvoice || !paymentAmount) return;
-    const num = Number(paymentAmount);
-    if (isNaN(num) || num <= 0) {
+    if (!/^[1-9]\d{0,18}$/.test(paymentAmount)) {
       alert('Số tiền thanh toán phải lớn hơn 0');
       return;
     }
+    const createsCredit = BigInt(paymentAmount) > BigInt(selectedInvoice.debt || '0');
+    if (createsCredit && !window.confirm('Khoản thu vượt công nợ và tạo tiền dư. Xác nhận ghi nhận?')) return;
     setActionLoading(true);
     try {
       const idempotencyKey = `PAY-${selectedInvoice.id}-${Date.now()}`;
       const fin = await paymentsApi.recordPayment(
         {
           invoiceId: selectedInvoice.id,
-          amount: num,
+          amount: paymentAmount,
+          overpaymentConfirmed: createsCredit,
           paymentMethod,
           referenceCode: paymentRefCode || undefined,
           note: paymentNote || undefined,
@@ -333,8 +341,8 @@ export const InvoicesPage: React.FC = () => {
 
   const handleConfirmCorrection = async () => {
     if (!targetLedgerEntry || !correctionDelta || !correctionReason) return;
-    const num = Number(correctionDelta);
-    if (isNaN(num) || num === 0) {
+    const num = correctionDelta;
+    if (!isMoney(num, false) || BigInt(num) === 0n) {
       alert('Số tiền điều chỉnh phải khác 0 (dùng dấu âm (-) để giảm số thu)');
       return;
     }
@@ -374,8 +382,8 @@ export const InvoicesPage: React.FC = () => {
 
   const handleConfirmRefund = async () => {
     if (!selectedInvoice || !refundAmount || !refundReason) return;
-    const num = Number(refundAmount);
-    if (isNaN(num) || num <= 0) {
+    const num = refundAmount;
+    if (!isMoney(num, false) || BigInt(num) <= 0n) {
       alert('Số tiền hoàn phải lớn hơn 0');
       return;
     }
@@ -414,8 +422,8 @@ export const InvoicesPage: React.FC = () => {
 
   const handleConfirmTransfer = async () => {
     if (!selectedInvoice || !targetInvoiceId || !transferAmount || !transferReason) return;
-    const num = Number(transferAmount);
-    if (isNaN(num) || num <= 0) {
+    const num = transferAmount;
+    if (!isMoney(num, false) || BigInt(num) <= 0n) {
       alert('Số tiền chuyển phải lớn hơn 0');
       return;
     }
@@ -444,10 +452,7 @@ export const InvoicesPage: React.FC = () => {
     }
   };
 
-  const formatVND = (val: string | number | undefined | null) => {
-    const num = Number(val) || 0;
-    return new Intl.NumberFormat('vi-VN').format(num) + ' đ';
-  };
+  const formatVND = formatMoney;
 
   const renderStatusChip = (status: InvoiceStatus) => {
     if (status === 'ISSUED') {
@@ -480,6 +485,10 @@ export const InvoicesPage: React.FC = () => {
         return <Chip label="HOÀN TIỀN" color="error" size="small" />;
       case 'CREDIT_APPLIED':
         return <Chip label="BÙ TRỪ / CHUYỂN DƯ" color="secondary" size="small" />;
+      case 'CREDIT_OUT':
+        return <Chip label="CHUYỂN DƯ ĐI" color="secondary" size="small" />;
+      case 'CREDIT_IN':
+        return <Chip label="NHẬN CHUYỂN DƯ" color="secondary" size="small" />;
       default:
         return <Chip label={type} size="small" />;
     }
@@ -1120,8 +1129,6 @@ export const InvoicesPage: React.FC = () => {
             >
               <MenuItem value="BANK_TRANSFER">Chuyển khoản ngân hàng</MenuItem>
               <MenuItem value="CASH">Tiền mặt</MenuItem>
-              <MenuItem value="MOMO">Ví MoMo</MenuItem>
-              <MenuItem value="VNPAY">VNPAY-QR</MenuItem>
             </TextField>
             <TextField
               label="Mã tham chiếu / Mã giao dịch ngân hàng"

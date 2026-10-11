@@ -67,11 +67,11 @@ export const operationsApi = {
   },
 
   // FILES
-  uploadFile: async (file: File, parentType: ParentType, parentId: string): Promise<StoredFileDto> => {
+  uploadFile: async (file: File, parentType: ParentType, parentId?: string): Promise<StoredFileDto> => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('parentType', parentType);
-    formData.append('parentId', parentId);
+    if (parentId) formData.append('parentId', parentId);
 
     const res = await apiClient.post<{ data: StoredFileDto }>('/files/upload', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },

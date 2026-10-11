@@ -1,7 +1,6 @@
 services:
   db:
     image: postgres:16-alpine
-    container_name: trohub_db
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-trohub}
@@ -17,6 +16,37 @@ services:
       timeout: 5s
       retries: 5
 
+  backend:
+    build: ../backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-trohub}
+      SPRING_DATASOURCE_USERNAME: ${POSTGRES_USER:-trohub}
+      SPRING_DATASOURCE_PASSWORD: ${POSTGRES_PASSWORD:-trohub_dev_secret}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET in infra/.env}
+      OWNER_BOOTSTRAP_ENABLED: ${OWNER_BOOTSTRAP_ENABLED:-false}
+      OWNER_BOOTSTRAP_LOGIN: ${OWNER_BOOTSTRAP_LOGIN:-owner}
+      OWNER_BOOTSTRAP_PASSWORD: ${OWNER_BOOTSTRAP_PASSWORD:-}
+      TROHUB_AUTH_SECURECOOKIES: ${SECURE_COOKIES:-false}
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8080}:8080"
+    volumes:
+      - trohub_uploads:/app/uploads
+
+  web:
+    build: ../web
+    restart: unless-stopped
+    depends_on:
+      - backend
+    ports:
+      - "127.0.0.1:${WEB_PORT:-8081}:80"
+
 volumes:
   trohub_pgdata:
+    driver: local
+  trohub_uploads:
     driver: local

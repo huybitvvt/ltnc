@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { formatMoney, isMoney } from '../../shared/money';
 import {
   Box,
   Typography,
@@ -190,11 +191,12 @@ export const MeteringPage: React.FC = () => {
 
   const handleCreateTariff = async () => {
     if (!selectedBuildingId || !newTariffServiceId || !newTariffMonth || !newTariffPrice) return;
+    if (!isMoney(newTariffPrice)) {setMessage({type:'error',text:'Đơn giá phải là số nguyên VNĐ, tối đa 19 chữ số'});return;}
     try {
       await meteringApi.createTariff(selectedBuildingId, {
         serviceId: newTariffServiceId,
         effectiveMonth: newTariffMonth,
-        unitPrice: Number(newTariffPrice),
+        unitPrice: newTariffPrice,
       });
       setAddTariffModalOpen(false);
       setMessage({ type: 'success', text: `Đã thiết lập đơn giá cho tháng ${newTariffMonth} thành công!` });
@@ -505,7 +507,7 @@ export const MeteringPage: React.FC = () => {
                       </TableCell>
                       <TableCell>{t.effectiveMonth}</TableCell>
                       <TableCell align="right">
-                        <strong>{Number(t.unitPrice).toLocaleString('vi-VN')} đ</strong>
+                        <strong>{formatMoney(t.unitPrice)}</strong>
                       </TableCell>
                     </TableRow>
                   ))}

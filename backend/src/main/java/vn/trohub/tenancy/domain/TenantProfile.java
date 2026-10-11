@@ -18,6 +18,12 @@ public class TenantProfile {
     @JoinColumn(name = "user_id")
     private User user;
 
+    @Column(name = "created_by")
+    private UUID createdBy;
+
+    public UUID getCreatedBy() { return createdBy; }
+    public void setCreatedBy(UUID createdBy) { this.createdBy = createdBy; }
+
     @Column(name = "full_name", nullable = false, length = 100)
     private String fullName;
 

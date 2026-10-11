@@ -66,6 +66,8 @@ class PaymentServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(invoiceRepository.findForUpdate(any())).thenAnswer(call -> invoiceRepository.findById(call.getArgument(0)));
+
         paymentService = new PaymentService(
                 invoiceRepository,
                 adjustmentRepository,
@@ -263,10 +265,12 @@ class PaymentServiceTest {
         assertEquals("50000", responseA.credit()); // A dư 50.000
         assertEquals(PaymentStatus.CREDIT, responseA.paymentStatus());
 
-        // Kiểm tra đã lưu 2 bút toán CREDIT_APPLIED (1 âm ở A, 1 dương ở B)
+        // Hai vế chuyển dư có loại và dấu riêng.
         ArgumentCaptor<InvoiceLedgerEntry> captor = ArgumentCaptor.forClass(InvoiceLedgerEntry.class);
         verify(ledgerEntryRepository, times(2)).save(captor.capture());
         List<InvoiceLedgerEntry> saved = captor.getAllValues();
+        assertEquals(LedgerEntryType.CREDIT_OUT, saved.get(0).getEntryType());
+        assertEquals(LedgerEntryType.CREDIT_IN, saved.get(1).getEntryType());
         assertEquals(new BigDecimal("-150000"), saved.get(0).getAmount());
         assertEquals(new BigDecimal("150000"), saved.get(1).getAmount());
     }
@@ -298,41 +302,13 @@ class PaymentServiceTest {
     @DisplayName("EX-25: Cùng idempotency key gửi lại khoản thu -> trả lại cùng kết quả, không tạo thêm entry")
     void testRecordPayment_Idempotency_EX25() {
         when(invoiceRepository.findById(invoiceA.getId())).thenReturn(Optional.of(invoiceA));
-        when(userRepository.findById(ownerPrincipal.getId())).thenReturn(Optional.of(ownerUser));
-        when(adjustmentRepository.sumDeltaAmountByInvoiceId(invoiceA.getId())).thenReturn(BigDecimal.ZERO);
-        when(ledgerEntryRepository.sumAmountByInvoiceId(invoiceA.getId())).thenReturn(new BigDecimal("1000000"));
 
-        String raw = "PAYMENT:" + invoiceA.getId() + ":1000000:TXN-DUPLICATE";
-        String sha256;
-        try {
-            var md = java.security.MessageDigest.getInstance("SHA-256");
-            byte[] b = md.digest(raw.getBytes(java.nio.charset.StandardCharsets.UTF_8));
-            var sb = new StringBuilder();
-            for (byte x : b) {
-                sb.append(String.format("%02x", x));
-            }
-            sha256 = sb.toString();
-        } catch (Exception e) {
-            sha256 = "hash";
-        }
-
-        FinancialOperation existingOp = new FinancialOperation(
-                "IDEM-DUPLICATE",
-                ownerUser,
-                FinancialAction.PAYMENT,
-                sha256,
-                "SUCCESS",
-                "Already processed"
-        );
-        when(operationRepository.findByIdempotencyKey("IDEM-DUPLICATE")).thenReturn(Optional.of(existingOp));
-
-        RecordPaymentRequest request = new RecordPaymentRequest(
-                invoiceA.getId(),
-                new BigDecimal("1000000"),
-                PaymentMethod.BANK_TRANSFER,
-                "TXN-DUPLICATE",
-                "Thu tiền gửi lại"
-        );
+        RecordPaymentRequest request = new RecordPaymentRequest(invoiceA.getId(), new BigDecimal("1000000"),
+                PaymentMethod.BANK_TRANSFER, "TXN-DUPLICATE", "Thu tiền gửi lại");
+        String snapshot = "{\"invoiceId\":\"" + invoiceA.getId() + "\",\"netApplied\":\"1000000\",\"debt\":\"2000000\",\"entries\":[]}";
+        FinancialOperation existingOp = new FinancialOperation("IDEM-DUPLICATE", ownerUser, FinancialAction.PAYMENT,
+                vn.trohub.common.security.JwtTokenProvider.hashToken("PAYMENT:" + request), "SUCCESS", snapshot);
+        when(operationRepository.findByActorIdAndIdempotencyKey(ownerPrincipal.getId(), "IDEM-DUPLICATE")).thenReturn(Optional.of(existingOp));
 
         InvoiceFinancialStatusResponse response = paymentService.recordPayment(request, ownerPrincipal, "IDEM-DUPLICATE");
 

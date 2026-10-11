@@ -20,16 +20,14 @@ import {
   DialogActions,
   Snackbar,
 } from '@mui/material';
-import {
-  MeetingRoom as RoomIcon,
-  Receipt as InvoiceIcon,
-  AttachMoney as MoneyIcon,
-  Warning as DebtIcon,
-  Savings as DepositIcon,
-  Build as IssueIcon,
-  Campaign as BroadcastIcon,
-  CheckCircle as PaidIcon,
-} from '@mui/icons-material';
+import RoomIcon from '@mui/icons-material/MeetingRoom';
+import InvoiceIcon from '@mui/icons-material/Receipt';
+import MoneyIcon from '@mui/icons-material/AttachMoney';
+import DebtIcon from '@mui/icons-material/Warning';
+import DepositIcon from '@mui/icons-material/Savings';
+import IssueIcon from '@mui/icons-material/Build';
+import BroadcastIcon from '@mui/icons-material/Campaign';
+import PaidIcon from '@mui/icons-material/CheckCircle';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
@@ -38,13 +36,9 @@ import { notificationsApi } from '../notifications/notificationsApi';
 import { apiClient } from '../../shared/api/client';
 import { BuildingItem } from '../property/types';
 import { ApiResponse } from '../auth/types';
+import { formatMoney } from '../../shared/money';
 
-const formatVnd = (value?: string | number | null) => {
-  if (!value) return '0 ₫';
-  const num = typeof value === 'string' ? parseFloat(value) : value;
-  if (isNaN(num)) return '0 ₫';
-  return new Intl.NumberFormat('vi-VN').format(num) + ' ₫';
-};
+const formatVnd = formatMoney;
 
 const getCurrentMonthString = () => {
   const d = new Date();
@@ -60,6 +54,7 @@ export const DashboardPage: React.FC = () => {
 
   const [selectedBuildingId, setSelectedBuildingId] = useState<string>('');
   const [billingMonth, setBillingMonth] = useState<string>(getCurrentMonthString());
+  const [cashFrom,setCashFrom]=useState(''),[cashTo,setCashTo]=useState(''),[asOf,setAsOf]=useState('');
 
   // Dialog Broadcast Notification
   const [openBroadcastDialog, setOpenBroadcastDialog] = useState(false);
@@ -83,8 +78,8 @@ export const DashboardPage: React.FC = () => {
     isLoading: isMetricsLoading,
     error: metricsError,
   } = useQuery<DashboardMetrics>({
-    queryKey: ['dashboardMetrics', selectedBuildingId, billingMonth],
-    queryFn: () => dashboardApi.getMetrics(selectedBuildingId || undefined, billingMonth || undefined),
+    queryKey: ['dashboardMetrics', selectedBuildingId, billingMonth, cashFrom, cashTo, asOf],
+    queryFn: () => dashboardApi.getMetrics(selectedBuildingId || undefined, billingMonth || undefined, { cashFrom, cashTo, asOf }),
     enabled: user?.role === 'OWNER' || user?.role === 'STAFF',
   });
 
@@ -216,12 +211,14 @@ export const DashboardPage: React.FC = () => {
 
           <TextField
             size="small"
-            label="Kỳ đối chiếu (YYYY-MM)"
+            label="Kỳ hóa đơn (YYYY-MM)"
             value={billingMonth}
             onChange={(e) => setBillingMonth(e.target.value)}
             sx={{ width: 180 }}
           />
-
+          <TextField size="small" label="Thu/hoàn từ ngày" type="date" value={cashFrom} onChange={e=>setCashFrom(e.target.value)} InputLabelProps={{shrink:true}} />
+          <TextField size="small" label="Thu/hoàn đến ngày" type="date" value={cashTo} onChange={e=>setCashTo(e.target.value)} InputLabelProps={{shrink:true}} />
+          <TextField size="small" label="Số dư đến ngày" type="date" value={asOf} onChange={e=>setAsOf(e.target.value)} InputLabelProps={{shrink:true}} />
           {selectedBuildingId && (
             <Button
               variant="contained"

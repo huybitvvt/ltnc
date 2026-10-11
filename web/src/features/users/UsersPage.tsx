@@ -21,15 +21,16 @@ import {
   CircularProgress,
   Tooltip,
   Snackbar,
+  Checkbox,
+  FormControlLabel,
+  TablePagination,
 } from '@mui/material';
-import {
-  Add as AddIcon,
-  Refresh as RefreshIcon,
-  VpnKey as KeyIcon,
-  LockOpen as LockOpenIcon,
-  Lock as LockIcon,
-  ContentCopy as CopyIcon,
-} from '@mui/icons-material';
+import AddIcon from '@mui/icons-material/Add';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import KeyIcon from '@mui/icons-material/VpnKey';
+import LockOpenIcon from '@mui/icons-material/LockOpen';
+import LockIcon from '@mui/icons-material/Lock';
+import CopyIcon from '@mui/icons-material/ContentCopy';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../shared/api/client';
 import { ApiResponse } from '../auth/types';
@@ -39,7 +40,6 @@ interface UserItem {
   login: string;
   role: string;
   enabled: boolean;
-  createdAt: string;
 }
 
 export const UsersPage: React.FC = () => {
@@ -47,38 +47,42 @@ export const UsersPage: React.FC = () => {
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [newLogin, setNewLogin] = useState('');
-  const [newPassword, setNewPassword] = useState('');
   const [createError, setCreateError] = useState<string | null>(null);
 
   const [inviteModalCode, setInviteModalCode] = useState<string | null>(null);
   const [snackbarMessage, setSnackbarMessage] = useState<string | null>(null);
+  const [page, setPage] = useState(0);
+  const [assignmentUser, setAssignmentUser] = useState<UserItem | null>(null);
+  const [assignedIds, setAssignedIds] = useState<string[]>([]);
+  const [assignmentLoading, setAssignmentLoading] = useState(false);
+  const { data: buildings = [] } = useQuery({
+    queryKey: ['buildings', 'assignments'],
+    queryFn: async () => (await apiClient.get<ApiResponse<Array<{id: string; name: string}>>>('/buildings')).data.data,
+  });
 
   // Fetch danh sách STAFF
   const { data: usersData, isLoading, refetch } = useQuery({
-    queryKey: ['users', 'STAFF'],
+    queryKey: ['users', 'STAFF', page],
     queryFn: async () => {
-      const res = await apiClient.get<ApiResponse<any>>('/users?role=STAFF');
-      // res.data.data có thể là Page { content: [...] } hoặc Array
-      const items = res.data.data?.content || res.data.data || [];
-      return items as UserItem[];
+      const res = await apiClient.get<ApiResponse<UserItem[]>>('/users', {params: {role: 'STAFF', page, size: 20}});
+      return { content: res.data.data, totalElements: res.data.meta?.totalElements ?? res.data.data.length };
     },
   });
 
   // Mutation tạo STAFF mới
   const createStaffMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiClient.post<ApiResponse<any>>('/users/staff', {
+      const res = await apiClient.post<ApiResponse<any>>('/users', {
         login: newLogin.trim(),
-        password: newPassword,
         buildingIds: [],
       });
       return res.data.data;
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
       setCreateDialogOpen(false);
       setNewLogin('');
-      setNewPassword('');
+      setInviteModalCode(data.inviteCode);
       setSnackbarMessage('Tạo tài khoản nhân viên thành công!');
     },
     onError: (err: any) => {
@@ -89,7 +93,7 @@ export const UsersPage: React.FC = () => {
   // Mutation bật/tắt trạng thái
   const toggleStatusMutation = useMutation({
     mutationFn: async ({ id, enabled }: { id: string; enabled: boolean }) => {
-      await apiClient.patch(`/users/${id}/status`, { enabled });
+      await apiClient.put(`/users/${id}/status`, { enabled });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['users'] });
@@ -103,8 +107,8 @@ export const UsersPage: React.FC = () => {
   // Mutation cấp lại mã mời
   const reissueInviteMutation = useMutation({
     mutationFn: async (userId: string) => {
-      const res = await apiClient.post<ApiResponse<string>>(`/users/${userId}/reissue-invite`);
-      return res.data.data;
+      const res = await apiClient.post<ApiResponse<{ inviteCode: string }>>(`/users/${userId}/reissue-invite`);
+      return res.data.data.inviteCode;
     },
     onSuccess: (code) => {
       setInviteModalCode(code);
@@ -117,6 +121,29 @@ export const UsersPage: React.FC = () => {
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     setSnackbarMessage('Đã sao chép vào bộ nhớ tạm!');
+  };
+
+  const openAssignments = async (staff: UserItem) => {
+    setAssignmentUser(staff);
+    setAssignedIds([]);
+    setAssignmentLoading(true);
+    try {
+      const res = await apiClient.get<ApiResponse<string[]>>(`/users/${staff.id}/assignments`);
+      setAssignedIds(res.data.data);
+    } catch (err: any) {
+      setAssignmentUser(null);
+      setSnackbarMessage(err.response?.data?.message || 'Không thể tải phân công');
+    } finally { setAssignmentLoading(false); }
+  };
+  const saveAssignments = async () => {
+    if (!assignmentUser) return;
+    setAssignmentLoading(true);
+    try {
+      await apiClient.put(`/users/${assignmentUser.id}/assignments`, {buildingIds: assignedIds});
+      setAssignmentUser(null);
+      setSnackbarMessage('Đã cập nhật phân công tòa nhà');
+    } catch (err: any) { setSnackbarMessage(err.response?.data?.message || 'Không thể lưu phân công'); }
+    finally { setAssignmentLoading(false); }
   };
 
   return (
@@ -154,7 +181,6 @@ export const UsersPage: React.FC = () => {
               <TableCell sx={{ fontWeight: 700 }}>Tên đăng nhập</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Vai trò</TableCell>
               <TableCell sx={{ fontWeight: 700 }}>Trạng thái</TableCell>
-              <TableCell sx={{ fontWeight: 700 }}>Ngày tạo</TableCell>
               <TableCell align="right" sx={{ fontWeight: 700 }}>
                 Thao tác
               </TableCell>
@@ -163,18 +189,18 @@ export const UsersPage: React.FC = () => {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={5} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={4} align="center" sx={{ py: 4 }}>
                   <CircularProgress size={32} />
                 </TableCell>
               </TableRow>
-            ) : !usersData || usersData.length === 0 ? (
+            ) : !usersData || usersData.content.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} align="center" sx={{ py: 4, color: 'text.secondary' }}>
+                <TableCell colSpan={4} align="center" sx={{ py: 4, color: 'text.secondary' }}>
                   Chưa có nhân viên nào trong hệ thống
                 </TableCell>
               </TableRow>
             ) : (
-              usersData.map((staff) => (
+              usersData.content.map((staff) => (
                 <TableRow key={staff.id} hover>
                   <TableCell sx={{ fontWeight: 600 }}>{staff.login}</TableCell>
                   <TableCell>
@@ -187,9 +213,9 @@ export const UsersPage: React.FC = () => {
                       size="small"
                     />
                   </TableCell>
-                  <TableCell>{staff.createdAt ? new Date(staff.createdAt).toLocaleDateString('vi-VN') : '—'}</TableCell>
                   <TableCell align="right">
-                    <Tooltip title="Cấp mã mời kích hoạt mới (24 giờ)">
+                    <Button size="small" onClick={() => void openAssignments(staff)}>Phân công tòa</Button>
+                    <Tooltip title={staff.enabled ? 'Cấp mã đặt lại mật khẩu (24 giờ)' : 'Cấp mã kích hoạt (24 giờ)'}>
                       <IconButton
                         color="secondary"
                         size="small"
@@ -214,6 +240,19 @@ export const UsersPage: React.FC = () => {
           </TableBody>
         </Table>
       </TableContainer>
+      <TablePagination component="div" count={usersData?.totalElements || 0} page={page}
+        onPageChange={(_, value) => setPage(value)} rowsPerPage={20} rowsPerPageOptions={[20]} />
+      <Dialog open={!!assignmentUser} onClose={() => !assignmentLoading && setAssignmentUser(null)} fullWidth maxWidth="sm">
+        <DialogTitle>Phân công: {assignmentUser?.login}</DialogTitle>
+        <DialogContent>
+          {assignmentLoading ? <CircularProgress size={24} /> : buildings.length === 0 ? <Typography>Chưa có tòa nhà.</Typography> : buildings.map(building => (
+            <Box key={building.id}><FormControlLabel label={building.name} control={<Checkbox checked={assignedIds.includes(building.id)}
+              onChange={(_, checked) => setAssignedIds(ids => checked ? [...ids, building.id] : ids.filter(id => id !== building.id))} />} /></Box>
+          ))}
+        </DialogContent>
+        <DialogActions><Button disabled={assignmentLoading} onClick={() => setAssignmentUser(null)}>Hủy</Button>
+          <Button variant="contained" disabled={assignmentLoading} onClick={() => void saveAssignments()}>Lưu phân công</Button></DialogActions>
+      </Dialog>
 
       {/* Dialog tạo nhân viên mới */}
       <Dialog open={createDialogOpen} onClose={() => setCreateDialogOpen(false)} maxWidth="xs" fullWidth>
@@ -239,15 +278,7 @@ export const UsersPage: React.FC = () => {
                 onChange={(e) => setNewLogin(e.target.value)}
                 placeholder="ví dụ: staff_lan"
               />
-              <TextField
-                label="Mật khẩu khởi tạo"
-                type="password"
-                required
-                fullWidth
-                value={newPassword}
-                onChange={(e) => setNewPassword(e.target.value)}
-                helperText="Tối thiểu 6 ký tự. Nhân viên có thể đổi mật khẩu sau."
-              />
+              <Alert severity="info">Nhân viên dùng mã mời để tự đặt mật khẩu và kích hoạt tài khoản.</Alert>
             </Box>
           </DialogContent>
           <DialogActions sx={{ px: 3, pb: 2.5 }}>
@@ -263,10 +294,10 @@ export const UsersPage: React.FC = () => {
 
       {/* Dialog hiển thị mã mời vừa cấp */}
       <Dialog open={!!inviteModalCode} onClose={() => setInviteModalCode(null)} maxWidth="xs" fullWidth>
-        <DialogTitle fontWeight={700}>Mã mời kích hoạt</DialogTitle>
+        <DialogTitle fontWeight={700}>Mã kích hoạt / đặt lại mật khẩu</DialogTitle>
         <DialogContent>
           <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
-            Mã mời có hiệu lực trong vòng <strong>24 giờ</strong>. Gửi mã này cho nhân viên để họ kích hoạt tài khoản.
+            Mã dùng một lần trong <strong>24 giờ</strong>. Tài khoản chưa kích hoạt dùng trang kích hoạt; tài khoản đang hoạt động dùng trang đặt lại mật khẩu.
           </Typography>
           <Paper
             elevation={0}

@@ -67,7 +67,8 @@ public class UserService {
             throw new IllegalArgumentException("Tên đăng nhập '" + login + "' đã tồn tại trong hệ thống");
         }
 
-        User staff = new User(login, passwordEncoder.encode(password), UserRole.STAFF);
+        User staff = new User(login, passwordEncoder.encode(password == null ? UUID.randomUUID().toString() : password), UserRole.STAFF);
+        staff.setEnabled(false);
         staff = userRepository.save(staff);
 
         if (buildingIds != null && !buildingIds.isEmpty()) {
@@ -82,6 +83,14 @@ public class UserService {
     }
 
     @Transactional
+    public vn.trohub.user.api.dto.UserDtos.StaffInviteResponse createStaffWithInvite(String login, List<UUID> buildingIds, User manager) {
+        if (manager.getRole() != UserRole.OWNER) throw new org.springframework.security.access.AccessDeniedException("Chỉ OWNER tạo nhân viên");
+        User staff = createStaff(login, null, buildingIds);
+        String code = authService.createInvite(manager, staff, InvitePurpose.TENANT_INVITE);
+        return new vn.trohub.user.api.dto.UserDtos.StaffInviteResponse(staff.getId(), staff.getLogin(), staff.getRole(), false, code);
+    }
+
+    @Transactional
     public User updateUserStatus(UUID userId, boolean enabled) {
         User user = getUserById(userId);
         user.setEnabled(enabled);
@@ -90,6 +99,7 @@ public class UserService {
         if (!enabled) {
             // Khi vô hiệu hóa tài khoản, thu hồi toàn bộ phiên làm việc ngay lập tức (BR-025, D-16)
             authSessionRepository.revokeAllUserSessions(userId, clock.instant());
+            authService.invalidateInvites(userId);
         }
 
         return user;
@@ -120,6 +130,10 @@ public class UserService {
     @Transactional
     public String reissueInvite(UUID targetUserId, User manager) {
         User target = getUserById(targetUserId);
-        return authService.createInvite(manager, target, InvitePurpose.TENANT_INVITE);
+        if (manager.getRole() == UserRole.STAFF
+                && (target.getRole() != UserRole.TENANT || !userRepository.isTenantInStaffScope(targetUserId, manager.getId())))
+            throw new org.springframework.security.access.AccessDeniedException("Tài khoản ngoài phạm vi được giao");
+        if (manager.getRole() == UserRole.TENANT) throw new org.springframework.security.access.AccessDeniedException("Chỉ quản lý cấp mã");
+        return authService.createInvite(manager, target, target.isEnabled() ? InvitePurpose.PASSWORD_RESET : InvitePurpose.TENANT_INVITE);
     }
 }

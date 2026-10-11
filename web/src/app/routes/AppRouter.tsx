@@ -5,6 +5,7 @@ import { ActivatePage } from '@/features/auth/ActivatePage';
 import { DashboardPage } from '@/features/dashboard/DashboardPage';
 import { TenantPortalPage } from '@/features/tenant/TenantPortalPage';
 import { UsersPage } from '@/features/users/UsersPage';
+import { AuditPage } from '@/features/audit/AuditPage';
 import { BuildingsPage } from '@/features/property/BuildingsPage';
 import { ContractsPage } from '@/features/contracts/ContractsPage';
 import { MeteringPage } from '@/features/metering/MeteringPage';
@@ -34,6 +35,7 @@ export const AppRouter: React.FC = () => {
         {/* Public Routes */}
         <Route path="/login" element={<LoginPage />} />
         <Route path="/activate" element={<ActivatePage />} />
+        <Route path="/reset-password" element={<ActivatePage reset />} />
 
         {/* Protected Routes inside AppLayout */}
         <Route
@@ -97,7 +99,7 @@ export const AppRouter: React.FC = () => {
           <Route path="/tickets" element={<Navigate to="/incidents" replace />} />
           <Route path="/deposits" element={<Navigate to="/contracts" replace />} />
           <Route path="/tenant/contracts" element={<Navigate to="/tenant" replace />} />
-          <Route path="/tenant/invoices" element={<Navigate to="/tenant" replace />} />
+          <Route path="/tenant/invoices" element={<Navigate to="/invoices" replace />} />
 
           <Route
             path="/users"
@@ -109,6 +111,7 @@ export const AppRouter: React.FC = () => {
           />
 
           <Route path="/status" element={<ConnectionStatusPage />} />
+          <Route path="/audit" element={<ProtectedRoute allowedRoles={['OWNER', 'STAFF']}><AuditPage /></ProtectedRoute>} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

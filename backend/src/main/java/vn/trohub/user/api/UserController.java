@@ -60,11 +60,11 @@ public class UserController {
 
     @PostMapping
     @PreAuthorize("hasRole('OWNER')")
-    public ResponseEntity<ApiResponse<UserSummaryDto>> createStaff(
-            @Valid @RequestBody CreateStaffRequest request
+    public ResponseEntity<ApiResponse<vn.trohub.user.api.dto.UserDtos.StaffInviteResponse>> createStaff(
+            @Valid @RequestBody CreateStaffRequest request,
+            @AuthenticationPrincipal UserPrincipal principal
     ) {
-        User staff = userService.createStaff(request.login(), request.password(), request.buildingIds());
-        UserSummaryDto dto = new UserSummaryDto(staff.getId(), staff.getLogin(), staff.getRole(), staff.isEnabled());
+        var dto = userService.createStaffWithInvite(request.login(), request.buildingIds(), userService.getUserById(principal.getId()));
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(dto));
     }
 

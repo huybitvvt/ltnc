@@ -4,15 +4,15 @@ Tài liệu này hướng dẫn chi tiết 14 bước chạy demo liên thông g
 
 ---
 
-## 1. Thông tin tài khoản Demo
+## 1. Chuẩn bị tài khoản
 
-| Vai trò | Tên đăng nhập | Mật khẩu | Phạm vi quyền | Giao diện khuyến nghị |
-|---|---|---|---|---|
-| **OWNER** | `owner` | `TroHubOwner@2026` | Toàn quyền hệ thống, xem mọi tòa nhà, doanh thu & dòng tiền | Web & Mobile |
-| **STAFF_A** | `staff_a` | `TroHubStaff@2026` | Quản lý Tòa nhà A (phòng, hợp đồng, chỉ số, hóa đơn, sự cố) | Web & Mobile |
-| **STAFF_B** | `staff_b` | `TroHubStaff@2026` | Quản lý Tòa nhà B | Web |
-| **TENANT_A** | `tenant_a` | `TroHubTenant@2026` | Khách thuê phòng 101 Tòa A (xem hợp đồng, hóa đơn, tạo sự cố) | Mobile |
-| **TENANT_B** | `tenant_b` | `TroHubTenant@2026` | Khách thuê phòng 201 Tòa B | Mobile |
+Đây là kịch bản nghiệm thu, không phải biên bản đã PASS. Xem STATUS và evidence cho những bước thực sự đã chạy. Android build/cài thiết bị hoãn theo yêu cầu ngày 11/10/2026.
+
+Chạy theo README trên database demo riêng. Bật bootstrap OWNER và cung cấp login/password qua môi trường; sau khởi tạo tắt bootstrap. Không có các tài khoản hoặc mật khẩu demo mặc định.
+
+- OWNER tạo STAFF_A/STAFF_B trong màn hình Nhân viên, gán tòa A/B rồi gửi mã kích hoạt dùng một lần. Người nhận tự đặt mật khẩu ở `/activate` và đăng nhập.
+- Quản lý tạo hồ sơ đại diện, lập hợp đồng nháp và cấp mã mời. Người thuê kích hoạt trước nhận phòng; tên đăng nhập ban đầu là số điện thoại hồ sơ. Tài khoản đã kích hoạt dùng mã reissue tại `/reset-password`.
+- Các tên `tenant_a`, `staff_a`, A/B ở các bước dưới chỉ là nhãn minh họa. Dùng login, IDs, ngày và dữ liệu đã tạo thực tế. Chọn kỳ đã đóng, có chỉ số đúng hai ranh giới; không mặc định số liệu tháng 09/2026 tồn tại.
 
 ---
 
@@ -34,8 +34,8 @@ Tài liệu này hướng dẫn chi tiết 14 bước chạy demo liên thông g
   1. Vào menu **Hợp đồng** -> Nhấn **Lập hợp đồng mới**.
   2. Chọn phòng `101`, nhập thông tin khách thuê đại diện `Nguyễn Văn A` (SĐT: `0901234567`, CCCD: `079090001111`).
   3. Chọn kỳ hạn từ ngày `01/09/2026` đến `01/09/2027`, giá thuê 3.000.000đ/tháng, cọc 3.000.000đ.
-  4. Nhấn **Kích hoạt** và tạo mã mời kích hoạt cho khách thuê.
-- **Kỳ vọng**: Hợp đồng chuyển sang trạng thái `ACTIVE`, phòng 101 chuyển trạng thái `OCCUPIED`.
+  4. Cấp mã mời để người thuê kích hoạt tài khoản. Sau đó nhập đủ chỉ số điện/nước bàn giao đúng ngày nhận phòng và kích hoạt hợp đồng.
+- **Kỳ vọng**: Hợp đồng chuyển sang trạng thái `ACTIVE`, phòng 101 chuyển trạng thái `RENTED`.
 
 ---
 

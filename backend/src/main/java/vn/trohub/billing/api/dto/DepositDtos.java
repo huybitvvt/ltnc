@@ -20,6 +20,9 @@ public class DepositDtos {
 
             @NotNull(message = "Số tiền cọc không được để trống")
             @DecimalMin(value = "1", message = "Số tiền cọc phải lớn hơn 0")
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal amount,
 
             PaymentMethod paymentMethod,
@@ -32,6 +35,9 @@ public class DepositDtos {
             UUID refEntryId,
 
             @NotNull(message = "deltaAmount không được để trống")
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal deltaAmount,
 
             @NotBlank(message = "Lý do sửa thu cọc không được để trống")
@@ -44,6 +50,9 @@ public class DepositDtos {
 
             @NotNull(message = "Số tiền hoàn không được để trống")
             @DecimalMin(value = "1", message = "Số tiền hoàn phải lớn hơn 0")
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal amount,
 
             @NotBlank(message = "Lý do hoàn cọc không được để trống")
@@ -59,6 +68,9 @@ public class DepositDtos {
 
             @NotNull(message = "Số tiền khấu trừ không được để trống")
             @DecimalMin(value = "1", message = "Số tiền khấu trừ phải lớn hơn 0")
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal amount,
 
             @NotBlank(message = "Lý do khấu trừ hư hại/phạt không được để trống")
@@ -76,6 +88,9 @@ public class DepositDtos {
 
             @NotNull(message = "Số tiền bù cọc không được để trống")
             @DecimalMin(value = "1", message = "Số tiền bù cọc phải lớn hơn 0")
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal amount,
 
             String note

@@ -27,35 +27,39 @@ public class AuthController {
     private static final String REFRESH_COOKIE_NAME = "trohub_refresh_token";
 
     private final AuthService authService;
+    @org.springframework.beans.factory.annotation.Value("${trohub.auth.secure-cookies:true}")
+    private boolean secureCookies;
 
     public AuthController(AuthService authService) {
         this.authService = authService;
     }
 
     @GetMapping("/csrf")
-    public ResponseEntity<ApiResponse<Map<String, String>>> getCsrfToken() {
+    public ResponseEntity<ApiResponse<Map<String, String>>> getCsrfToken(org.springframework.security.web.csrf.CsrfToken csrf) {
         Map<String, String> data = Map.of(
-                "token", UUID.randomUUID().toString(),
-                "headerName", "X-XSRF-TOKEN"
+                "token", csrf.getToken(),
+                "headerName", csrf.getHeaderName()
         );
         return ResponseEntity.ok(ApiResponse.of(data));
     }
 
-    @PostMapping("/login")
+    @PostMapping({"/web/login", "/mobile/login"})
     public ResponseEntity<ApiResponse<AuthResponseData>> login(
             @Valid @RequestBody LoginRequest request,
+            HttpServletRequest httpRequest,
             HttpServletResponse response
     ) {
         AuthResult result = authService.login(request.login(), request.password());
 
         // Đặt HttpOnly cookie cho Web client (BR: D-16)
-        setRefreshCookie(response, result.refreshToken(), 7 * 24 * 60 * 60);
+        boolean mobile = httpRequest.getRequestURI().contains("/mobile/");
+        if (!mobile) setRefreshCookie(response, result.refreshToken(), 7 * 24 * 60 * 60);
 
         AuthResponseData responseData = new AuthResponseData(
                 result.accessToken(),
                 "Bearer",
                 900,
-                result.refreshToken(),
+                mobile ? result.refreshToken() : null,
                 new UserSummaryDto(
                         result.user().getId(),
                         result.user().getLogin(),
@@ -68,28 +72,12 @@ public class AuthController {
     }
 
     @PostMapping("/activate")
-    public ResponseEntity<ApiResponse<AuthResponseData>> activate(
+    public ResponseEntity<ApiResponse<Map<String, String>>> activate(
             @Valid @RequestBody ActivateInviteRequest request,
             HttpServletResponse response
     ) {
-        AuthResult result = authService.activateAccount(request.inviteCode(), request.password());
-
-        setRefreshCookie(response, result.refreshToken(), 7 * 24 * 60 * 60);
-
-        AuthResponseData responseData = new AuthResponseData(
-                result.accessToken(),
-                "Bearer",
-                900,
-                result.refreshToken(),
-                new UserSummaryDto(
-                        result.user().getId(),
-                        result.user().getLogin(),
-                        result.user().getRole(),
-                        result.user().isEnabled()
-                )
-        );
-
-        return ResponseEntity.ok(ApiResponse.of(responseData));
+        authService.activateAccount(request.inviteCode(), request.password());
+        return ResponseEntity.ok(ApiResponse.of(Map.of("message", "Kích hoạt thành công. Vui lòng đăng nhập.")));
     }
 
     @PostMapping("/web/refresh")
@@ -121,11 +109,13 @@ public class AuthController {
     @PostMapping("/web/logout")
     public ResponseEntity<ApiResponse<Map<String, String>>> logoutWeb(
             @AuthenticationPrincipal UserPrincipal principal,
+            HttpServletRequest request,
             HttpServletResponse response
     ) {
         if (principal != null) {
             authService.logoutBySessionId(principal.getSessionId());
         }
+        authService.logoutByRefreshToken(extractCookie(request, REFRESH_COOKIE_NAME));
         deleteRefreshCookie(response);
         return ResponseEntity.ok(ApiResponse.of(Map.of("message", "Đăng xuất thành công")));
     }
@@ -172,6 +162,12 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.of(Map.of("message", "Đổi mật khẩu thành công. Vui lòng đăng nhập lại.")));
     }
 
+    @PostMapping("/reset-password")
+    public ResponseEntity<ApiResponse<Map<String, String>>> resetPassword(@Valid @RequestBody ActivateInviteRequest request) {
+        authService.resetPassword(request.inviteCode(), request.password());
+        return ResponseEntity.ok(ApiResponse.of(Map.of("message", "Đặt lại mật khẩu thành công. Vui lòng đăng nhập.")));
+    }
+
     @GetMapping("/me")
     @PreAuthorize("isAuthenticated()")
     public ResponseEntity<ApiResponse<UserProfileData>> getCurrentUser(
@@ -190,7 +186,7 @@ public class AuthController {
     private void setRefreshCookie(HttpServletResponse response, String token, long maxAgeSeconds) {
         ResponseCookie cookie = ResponseCookie.from(REFRESH_COOKIE_NAME, token)
                 .httpOnly(true)
-                .secure(false) // local HTTP dev
+                .secure(secureCookies)
                 .sameSite("Lax")
                 .path("/api/v1/auth/web")
                 .maxAge(maxAgeSeconds)
@@ -201,7 +197,7 @@ public class AuthController {
     private void deleteRefreshCookie(HttpServletResponse response) {
         ResponseCookie cookie = ResponseCookie.from(REFRESH_COOKIE_NAME, "")
                 .httpOnly(true)
-                .secure(false)
+                .secure(secureCookies)
                 .sameSite("Lax")
                 .path("/api/v1/auth/web")
                 .maxAge(0)

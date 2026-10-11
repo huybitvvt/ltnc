@@ -5,9 +5,10 @@ import { useMobileAuth } from './AuthContext';
 
 interface LoginScreenProps {
   onNavigateToActivate: () => void;
+  onNavigateToReset?: () => void;
 }
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToActivate }) => {
+export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToActivate, onNavigateToReset }) => {
   const theme = useTheme();
   const { login } = useMobileAuth();
 
@@ -114,6 +115,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onNavigateToActivate }
           >
             Kích hoạt tài khoản bằng mã mời
           </Button>
+          <Button mode="text" onPress={onNavigateToReset} disabled={loading}>Đặt lại mật khẩu bằng mã được cấp</Button>
         </Surface>
       </ScrollView>
     </KeyboardAvoidingView>

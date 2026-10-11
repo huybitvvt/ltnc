@@ -1,3 +1,6 @@
+import { todayInVietnam } from '../../shared/date';
+import { InvoiceExtras } from './InvoiceExtras';
+import { isMoney, formatMoney } from '../../shared/money';
 import React, { useState, useEffect } from 'react';
 import {
   View,
@@ -101,11 +104,7 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({ onBack }) => {
   // Action states
   const [issuing, setIssuing] = useState(false);
 
-  const formatVnd = (amount: string | number | undefined | null) => {
-    if (!amount) return '0 đ';
-    const num = typeof amount === 'string' ? parseFloat(amount) : amount;
-    return new Intl.NumberFormat('vi-VN').format(num) + ' đ';
-  };
+  const formatVnd = formatMoney;
 
   const loadInvoices = async () => {
     try {
@@ -192,8 +191,8 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({ onBack }) => {
 
   const handleConfirmAdjust = async () => {
     if (!selectedInvoice) return;
-    const delta = parseFloat(adjustDelta.replace(/[^0-9.-]/g, ''));
-    if (isNaN(delta) || delta === 0) {
+    const delta = adjustDelta;
+    if (!isMoney(delta, true) || BigInt(delta) === 0n) {
       Alert.alert('Lỗi', 'Số tiền điều chỉnh phải khác 0 (dùng dấu âm (-) nếu giảm trừ).');
       return;
     }
@@ -204,7 +203,7 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({ onBack }) => {
 
     try {
       setAdjusting(true);
-      const effectiveDate = new Date().toISOString().split('T')[0];
+      const effectiveDate = todayInVietnam();
       await mobileApiClient.post(
         `/invoices/${selectedInvoice.id}/adjust`,
         {
@@ -259,11 +258,18 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({ onBack }) => {
     }
   };
 
-  const handleConfirmPayment = async () => {
+  const handleConfirmPayment = async (overpaymentConfirmed = false) => {
     if (!selectedInvoice) return;
-    const amount = parseFloat(payAmount.replace(/[^0-9.-]/g, ''));
-    if (isNaN(amount) || amount <= 0) {
+    const amount = payAmount.trim();
+    if (!/^[1-9]\d{0,18}$/.test(amount)) {
       Alert.alert('Lỗi', 'Số tiền thu phải lớn hơn 0');
+      return;
+    }
+    if (BigInt(amount) > BigInt(selectedInvoice.debt || '0') && !overpaymentConfirmed) {
+      Alert.alert('Xác nhận tiền dư', 'Khoản thu vượt công nợ và tạo tiền dư.', [
+        {text: 'Hủy', style: 'cancel'},
+        {text: 'Ghi nhận', onPress: () => { void handleConfirmPayment(true); }},
+      ]);
       return;
     }
     try {
@@ -272,7 +278,8 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({ onBack }) => {
         '/payments/record',
         {
           invoiceId: selectedInvoice.id,
-          amount: String(amount),
+          amount,
+          overpaymentConfirmed,
           paymentMethod: payMethod,
           referenceCode: payRefCode.trim() || undefined,
           note: payNote.trim() || undefined,
@@ -299,8 +306,8 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({ onBack }) => {
 
   const handleConfirmCorrection = async () => {
     if (!selectedEntry || !selectedInvoice) return;
-    const delta = parseFloat(correctDelta.replace(/[^0-9.-]/g, ''));
-    if (isNaN(delta) || delta === 0) {
+    const delta = correctDelta;
+    if (!isMoney(delta, true) || BigInt(delta) === 0n) {
       Alert.alert('Lỗi', 'Số tiền sửa delta phải khác 0 (dùng dấu âm nếu giảm thu)');
       return;
     }
@@ -339,8 +346,8 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({ onBack }) => {
 
   const handleConfirmRefund = async () => {
     if (!selectedInvoice) return;
-    const amount = parseFloat(refundAmount.replace(/[^0-9.-]/g, ''));
-    if (isNaN(amount) || amount <= 0) {
+    const amount = refundAmount;
+    if (!isMoney(amount, false) || BigInt(amount) <= 0n) {
       Alert.alert('Lỗi', 'Số tiền hoàn phải lớn hơn 0');
       return;
     }
@@ -483,7 +490,7 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({ onBack }) => {
                       variant="titleMedium"
                       style={{
                         fontWeight: '800',
-                        color: parseFloat(inv.debt) > 0 ? '#dc2626' : '#16a34a',
+                        color: BigInt(inv.debt) > 0 ? '#dc2626' : '#16a34a',
                       }}
                     >
                       {formatVnd(inv.debt)}
@@ -656,7 +663,7 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({ onBack }) => {
                     {formatVnd(selectedInvoice.debt)}
                   </Text>
                 </View>
-                {parseFloat(selectedInvoice.credit || '0') > 0 && (
+                {BigInt(selectedInvoice.credit || '0') > 0 && (
                   <View style={[styles.summaryRow, { backgroundColor: '#f0fdf4', padding: 6, borderRadius: 6 }]}>
                     <Text variant="bodyMedium" style={{ color: '#059669', fontWeight: '700' }}>
                       SỐ DƯ THỪA (CREDIT):
@@ -674,7 +681,7 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({ onBack }) => {
                   </Text>
                   {financialStatus && financialStatus.entries.length > 0 ? (
                     financialStatus.entries.map((entry) => {
-                      const isNegative = parseFloat(entry.amount) < 0;
+                      const isNegative = BigInt(entry.amount) < 0;
                       return (
                         <View key={entry.id} style={styles.ledgerItem}>
                           <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -765,7 +772,7 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({ onBack }) => {
                     {selectedInvoice.adjustments.map((adj) => (
                       <View key={adj.id} style={styles.historyItem}>
                         <Text variant="bodySmall" style={{ fontWeight: '700' }}>
-                          {parseFloat(adj.deltaAmount) > 0 ? '+' : ''}
+                          {BigInt(adj.deltaAmount) > 0 ? '+' : ''}
                           {formatVnd(adj.deltaAmount)} — {adj.reason}
                         </Text>
                         <Text variant="labelSmall" style={{ color: '#94a3b8' }}>
@@ -776,6 +783,9 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({ onBack }) => {
                   </View>
                 )}
 
+                <InvoiceExtras key={selectedInvoice.id} invoice={selectedInvoice} onChanged={async () => {
+                  await openDetail(selectedInvoice.id); await loadInvoices();
+                }} />
                 {/* Notes history if any */}
                 {selectedInvoice.notes.length > 0 && (
                   <View style={{ marginTop: 14 }}>
@@ -825,7 +835,7 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({ onBack }) => {
                       Thu tiền
                     </Button>
 
-                    {parseFloat(selectedInvoice.credit || '0') > 0 && (
+                    {BigInt(selectedInvoice.credit || '0') > 0 && (
                       <Button
                         mode="contained-tonal"
                         onPress={() => {
@@ -889,7 +899,6 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({ onBack }) => {
               buttons={[
                 { value: 'BANK_TRANSFER', label: 'CK' },
                 { value: 'CASH', label: 'Tiền mặt' },
-                { value: 'MOMO', label: 'MoMo' },
               ]}
               style={{ marginBottom: 12 }}
             />
@@ -911,7 +920,7 @@ export const InvoicesScreen: React.FC<InvoicesScreenProps> = ({ onBack }) => {
           </Dialog.Content>
           <Dialog.Actions>
             <Button onPress={() => setPaymentDialogVisible(false)}>Hủy</Button>
-            <Button mode="contained" loading={paying} onPress={handleConfirmPayment}>
+            <Button mode="contained" loading={paying} onPress={() => { void handleConfirmPayment(); }}>
               Xác nhận thu
             </Button>
           </Dialog.Actions>

@@ -1,3 +1,5 @@
+import { todayInVietnam } from '../../shared/date';
+import { isMoney, formatMoney, minMoney } from '../../shared/money';
 import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, RefreshControl } from 'react-native';
 import {
@@ -56,7 +58,7 @@ export const ContractsScreen: React.FC<ContractsScreenProps> = ({ onBack }) => {
   // Modal Thêm thành viên
   const [addMemberContract, setAddMemberContract] = useState<ContractSummary | null>(null);
   const [selectedTenantId, setSelectedTenantId] = useState('');
-  const [joinedDate, setJoinedDate] = useState(new Date().toISOString().split('T')[0]);
+  const [joinedDate, setJoinedDate] = useState(todayInVietnam());
   const [memberError, setMemberError] = useState<string | null>(null);
 
   // Modal Mã mời
@@ -98,7 +100,7 @@ export const ContractsScreen: React.FC<ContractsScreenProps> = ({ onBack }) => {
 
   // Trả phòng (Checkout Wizard)
   const [checkoutContract, setCheckoutContract] = useState<ContractSummary | null>(null);
-  const [checkoutDate, setCheckoutDate] = useState(new Date().toISOString().split('T')[0]);
+  const [checkoutDate, setCheckoutDate] = useState(todayInVietnam());
   const [checkoutElec, setCheckoutElec] = useState('0.000');
   const [checkoutWater, setCheckoutWater] = useState('0.000');
   const [checkoutError, setCheckoutError] = useState<string | null>(null);
@@ -231,8 +233,8 @@ export const ContractsScreen: React.FC<ContractsScreenProps> = ({ onBack }) => {
 
   const handleRecordReceipt = async () => {
     if (!depositContract) return;
-    const num = parseFloat(receiptAmount);
-    if (isNaN(num) || num <= 0) {
+    const num = receiptAmount;
+    if (!isMoney(num, false) || BigInt(num) <= 0n) {
       setDepositOpError('Số tiền thu cọc phải > 0');
       return;
     }
@@ -261,8 +263,8 @@ export const ContractsScreen: React.FC<ContractsScreenProps> = ({ onBack }) => {
 
   const handleRefund = async () => {
     if (!depositContract) return;
-    const num = parseFloat(refundAmount);
-    if (isNaN(num) || num <= 0) {
+    const num = refundAmount;
+    if (!isMoney(num, false) || BigInt(num) <= 0n) {
       setDepositOpError('Số tiền hoàn cọc phải > 0');
       return;
     }
@@ -295,8 +297,8 @@ export const ContractsScreen: React.FC<ContractsScreenProps> = ({ onBack }) => {
 
   const handleDeduct = async () => {
     if (!depositContract) return;
-    const num = parseFloat(deductAmount);
-    if (isNaN(num) || num <= 0) {
+    const num = deductAmount;
+    if (!isMoney(num, false) || BigInt(num) <= 0n) {
       setDepositOpError('Số tiền khấu trừ phải > 0');
       return;
     }
@@ -337,9 +339,7 @@ export const ContractsScreen: React.FC<ContractsScreenProps> = ({ onBack }) => {
       setUnpaidInvoices(unpaid);
       if (unpaid.length > 0) {
         setOffsetInvoiceId(unpaid[0].id);
-        const held = Number(depositData?.depositHeld || 0);
-        const debt = Number(unpaid[0].debt || 0);
-        setOffsetAmount(String(Math.min(held, debt)));
+        setOffsetAmount(minMoney(depositData?.depositHeld || '0', unpaid[0].debt || '0'));
       }
       setOffsetOpen(true);
     } catch (err: any) {
@@ -349,8 +349,8 @@ export const ContractsScreen: React.FC<ContractsScreenProps> = ({ onBack }) => {
 
   const handleOffset = async () => {
     if (!depositContract || !offsetInvoiceId) return;
-    const num = parseFloat(offsetAmount);
-    if (isNaN(num) || num <= 0) {
+    const num = offsetAmount;
+    if (!isMoney(num, false) || BigInt(num) <= 0n) {
       setDepositOpError('Số tiền bù nợ phải > 0');
       return;
     }
@@ -428,11 +428,6 @@ export const ContractsScreen: React.FC<ContractsScreenProps> = ({ onBack }) => {
     } finally {
       setCheckoutLoading(false);
     }
-  };
-
-  const formatMoney = (val?: string) => {
-    if (!val) return '0 ₫';
-    return Number(val).toLocaleString('vi-VN') + ' ₫';
   };
 
   const getDepositStatusChip = (status?: string) => {
@@ -646,7 +641,7 @@ export const ContractsScreen: React.FC<ContractsScreenProps> = ({ onBack }) => {
                         buttonColor="#dc2626"
                         onPress={() => {
                           setCheckoutError(null);
-                          setCheckoutDate(new Date().toISOString().split('T')[0]);
+                          setCheckoutDate(todayInVietnam());
                           setCheckoutElec('0.000');
                           setCheckoutWater('0.000');
                           setCheckoutContract(c);
@@ -996,9 +991,7 @@ export const ContractsScreen: React.FC<ContractsScreenProps> = ({ onBack }) => {
                       compact
                       onPress={() => {
                         setOffsetInvoiceId(inv.id);
-                        const held = Number(depositData?.depositHeld || 0);
-                        const debt = Number(inv.debt || 0);
-                        setOffsetAmount(String(Math.min(held, debt)));
+                        setOffsetAmount(minMoney(depositData?.depositHeld || '0', inv.debt || '0'));
                       }}
                       style={{ marginBottom: 6 }}
                     >

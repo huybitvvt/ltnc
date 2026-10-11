@@ -115,13 +115,13 @@ class UserServiceTest {
         User manager = new User("owner", "pass", UserRole.OWNER);
 
         when(userRepository.findById(targetUserId)).thenReturn(Optional.of(target));
-        when(authService.createInvite(eq(manager), eq(target), eq(InvitePurpose.TENANT_INVITE)))
+        when(authService.createInvite(eq(manager), eq(target), eq(InvitePurpose.PASSWORD_RESET)))
                 .thenReturn("INV-NEWCODE123");
 
         String inviteCode = userService.reissueInvite(targetUserId, manager);
 
         assertNotNull(inviteCode);
         assertEquals("INV-NEWCODE123", inviteCode);
-        verify(authService).createInvite(eq(manager), eq(target), eq(InvitePurpose.TENANT_INVITE));
+        verify(authService).createInvite(eq(manager), eq(target), eq(InvitePurpose.PASSWORD_RESET));
     }
 }

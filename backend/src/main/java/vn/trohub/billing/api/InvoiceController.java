@@ -67,7 +67,7 @@ public class InvoiceController {
     @PostMapping("/{id}/issue")
     public ResponseEntity<ApiResponse<InvoiceDetailResponse>> issueInvoice(
             @PathVariable UUID id,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader("X-Idempotency-Key") String idempotencyKey,
             @AuthenticationPrincipal UserPrincipal user) {
         InvoiceDetailResponse response = billingService.issueInvoice(id, idempotencyKey, user);
         return ResponseEntity.ok(ApiResponse.ok(response));
@@ -76,7 +76,7 @@ public class InvoiceController {
     @PostMapping("/{id}/adjust")
     public ResponseEntity<ApiResponse<InvoiceDetailResponse>> adjustInvoice(
             @PathVariable UUID id,
-            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader("X-Idempotency-Key") String idempotencyKey,
             @Valid @RequestBody AdjustInvoiceRequest request,
             @AuthenticationPrincipal UserPrincipal user) {
         InvoiceDetailResponse response = billingService.adjustInvoice(

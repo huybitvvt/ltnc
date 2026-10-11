@@ -22,3 +22,13 @@ mobile/.expo/
 
 # Infra & Uploads
 infra/uploads/
+infra/*pgdata/
+uploads/
+.tools/
+mobile/android/.gradle/
+mobile/android/app/build/
+mobile/android/build/
+mobile/android/
+*.keystore
+web/test-results/
+web/playwright-report/

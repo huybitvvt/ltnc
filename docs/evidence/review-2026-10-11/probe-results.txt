@@ -1,0 +1,13 @@
+Observed on 2026-10-11, Windows, Java 25.0.3, working tree at commit 631e6f2 plus existing local changes.
+Source: ReviewProbe.java. Repositories are mocked using the existing test fixtures.
+The completed probe invocation returned exit code 0. These outputs demonstrate defects, not acceptance passes.
+
+TENANT_RECORD_PAYMENT: ACCEPTED_AND_LEDGER_SAVE_CALLED; expected forbidden
+TENANT_DRAFT_FINANCIAL_STATUS: RETURNED; expected not found
+ZERO_INVOICE_STATUS: UNPAID; expected PAID
+STAFF_GLOBAL_DASHBOARD: billedAmount=9876543; no assignment check performed
+OPEN_MONTH_ISSUE: ISSUED, periodEnd=2026-11-01, today=2026-10-11; expected rejected
+MONEY_JSON: {"id":null,"type":"RENT","label":"review","quantity":1,"unitPrice":9007199254740993,"amount":9007199254740993,"calculationSnapshot":"{}","readingRefs":null,"tariffRef":null}
+SCOPE: isolated service probes with mocked repositories; not HTTP/PostgreSQL integration tests
+
+The Java invocation also emitted unchecked-cast, Mockito agent and deprecated Unsafe warnings.

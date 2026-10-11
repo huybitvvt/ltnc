@@ -11,11 +11,15 @@ import {
   InputAdornment,
   IconButton,
 } from '@mui/material';
-import { Visibility, VisibilityOff, VpnKeyOutlined, LockOutlined } from '@mui/icons-material';
+import Visibility from '@mui/icons-material/Visibility';
+import VisibilityOff from '@mui/icons-material/VisibilityOff';
+import VpnKeyOutlined from '@mui/icons-material/VpnKeyOutlined';
+import LockOutlined from '@mui/icons-material/LockOutlined';
 import { useNavigate, Link as RouterLink } from 'react-router-dom';
 import { useAuth } from './AuthContext';
+import { apiClient } from '../../shared/api/client';
 
-export const ActivatePage: React.FC = () => {
+export const ActivatePage: React.FC<{ reset?: boolean }> = ({ reset = false }) => {
   const { activate } = useAuth();
   const navigate = useNavigate();
 
@@ -42,9 +46,10 @@ export const ActivatePage: React.FC = () => {
 
     setLoading(true);
     try {
-      await activate(inviteCode.trim().toUpperCase(), password);
+      if (reset) await apiClient.post('/auth/reset-password', { inviteCode: inviteCode.trim().toUpperCase(), password });
+      else await activate(inviteCode.trim().toUpperCase(), password);
       navigate('/login', {
-        state: { message: 'Kích hoạt tài khoản thành công! Vui lòng đăng nhập với mật khẩu mới.' },
+        state: { message: 'Mật khẩu đã được lưu. Vui lòng đăng nhập với mật khẩu mới.' },
       });
     } catch (err: any) {
       const apiMsg = err.response?.data?.error?.message || err.message || 'Kích hoạt tài khoản thất bại';
@@ -85,7 +90,7 @@ export const ActivatePage: React.FC = () => {
             }}
           >
             <Typography variant="h5" fontWeight={800} gutterBottom>
-              Kích hoạt tài khoản
+              {reset ? 'Đặt lại mật khẩu' : 'Kích hoạt tài khoản'}
             </Typography>
             <Typography variant="body2" sx={{ opacity: 0.9 }}>
               Nhập mã mời được quản lý cấp (mã có hiệu lực trong vòng 24 giờ)
@@ -178,7 +183,7 @@ export const ActivatePage: React.FC = () => {
                     boxShadow: '0 10px 15px -3px rgba(5, 150, 105, 0.3)',
                   }}
                 >
-                  {loading ? 'Đang kích hoạt...' : 'Kích hoạt ngay'}
+                  {loading ? 'Đang lưu...' : reset ? 'Đặt lại mật khẩu' : 'Kích hoạt ngay'}
                 </Button>
 
                 <Button

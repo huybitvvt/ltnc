@@ -18,7 +18,7 @@ export const depositsApi = {
   },
 
   recordReceipt: async (data: RecordDepositReceiptRequest, idempotencyKey?: string) => {
-    const headers = idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {};
+    const headers = idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : {};
     const res = await apiClient.post<{ data: ContractDepositFinancialStatusResponse }>(
       '/deposits/receipt',
       data,
@@ -28,7 +28,7 @@ export const depositsApi = {
   },
 
   correctReceipt: async (data: CorrectDepositReceiptRequest, idempotencyKey?: string) => {
-    const headers = idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {};
+    const headers = idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : {};
     const res = await apiClient.post<{ data: ContractDepositFinancialStatusResponse }>(
       '/deposits/correct',
       data,
@@ -38,7 +38,7 @@ export const depositsApi = {
   },
 
   refundDeposit: async (data: RefundDepositRequest, idempotencyKey?: string) => {
-    const headers = idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {};
+    const headers = idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : {};
     const res = await apiClient.post<{ data: ContractDepositFinancialStatusResponse }>(
       '/deposits/refund',
       data,
@@ -48,7 +48,7 @@ export const depositsApi = {
   },
 
   deductDeposit: async (data: DeductDepositRequest, idempotencyKey?: string) => {
-    const headers = idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {};
+    const headers = idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : {};
     const res = await apiClient.post<{ data: ContractDepositFinancialStatusResponse }>(
       '/deposits/deduct',
       data,
@@ -58,7 +58,7 @@ export const depositsApi = {
   },
 
   offsetToInvoice: async (data: OffsetDepositToInvoiceRequest, idempotencyKey?: string) => {
-    const headers = idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {};
+    const headers = idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : {};
     const res = await apiClient.post<{ data: ContractDepositFinancialStatusResponse }>(
       '/deposits/offset-invoice',
       data,
@@ -68,7 +68,7 @@ export const depositsApi = {
   },
 
   settleDeposit: async (data: SettleDepositRequest, idempotencyKey?: string) => {
-    const headers = idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : {};
+    const headers = idempotencyKey ? { 'X-Idempotency-Key': idempotencyKey } : {};
     const res = await apiClient.post<{ data: ContractDepositFinancialStatusResponse }>(
       '/deposits/settle',
       data,

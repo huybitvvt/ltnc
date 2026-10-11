@@ -19,6 +19,7 @@ import { useMobileAuth } from '../auth/AuthContext';
 import { mobileDashboardApi, DashboardMetrics } from './dashboardApi';
 import { mobileNotificationsApi, AppNotification } from './notificationsApi';
 import { mobileApiClient } from '../auth/mobileClient';
+import { formatMoney } from '../../shared/money';
 
 interface HomeScreenProps {
   onNavigateToStatus: () => void;
@@ -27,14 +28,11 @@ interface HomeScreenProps {
   onNavigateToMetering?: () => void;
   onNavigateToInvoices?: () => void;
   onNavigateToIncidents?: () => void;
+  onNavigateToUsers?: () => void;
+  onNavigateToAudit?: () => void;
 }
 
-const formatVnd = (value?: string | number | null) => {
-  if (!value) return '0 ₫';
-  const num = typeof value === 'string' ? parseFloat(value) : value;
-  if (isNaN(num)) return '0 ₫';
-  return new Intl.NumberFormat('vi-VN').format(num) + ' ₫';
-};
+const formatVnd = formatMoney;
 
 export const HomeScreen: React.FC<HomeScreenProps> = ({
   onNavigateToStatus,
@@ -43,6 +41,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   onNavigateToMetering,
   onNavigateToInvoices,
   onNavigateToIncidents,
+  onNavigateToUsers,
+  onNavigateToAudit,
 }) => {
   const theme = useTheme();
   const { user, logout, changePassword } = useMobileAuth();
@@ -75,6 +75,7 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
   // Dashboard Metrics
   const [metrics, setMetrics] = useState<DashboardMetrics | null>(null);
   const [metricsLoading, setMetricsLoading] = useState(false);
+  const [billingMonth,setBillingMonth]=useState(''),[cashFrom,setCashFrom]=useState(''),[cashTo,setCashTo]=useState(''),[asOf,setAsOf]=useState('');
 
   const roleColor = {
     OWNER: '#ef4444',
@@ -113,14 +114,14 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
     if (user?.role === 'TENANT') return;
     setMetricsLoading(true);
     try {
-      const data = await mobileDashboardApi.getMetrics();
+      const data = await mobileDashboardApi.getMetrics(selectedBuildingId || undefined,billingMonth || undefined,{cashFrom,cashTo,asOf});
       setMetrics(data);
     } catch {
-      // ignore
+      setStatusMessage('Không tải được dashboard. Kiểm tra bộ lọc và thử lại.');
     } finally {
       setMetricsLoading(false);
     }
-  }, [user?.role]);
+  }, [user?.role,selectedBuildingId,billingMonth,cashFrom,cashTo,asOf]);
 
   const loadBuildings = useCallback(async () => {
     if (user?.role === 'TENANT') return;
@@ -258,6 +259,13 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       </Surface>
 
       {/* Financial & Operational Summary for OWNER / STAFF (BR-148..BR-160) */}
+      {user?.role !== 'TENANT' && <View style={{padding:12,gap:8}}>
+        <TextInput label="Kỳ hóa đơn YYYY-MM" value={billingMonth} onChangeText={setBillingMonth} />
+        <TextInput label="Thu/hoàn từ YYYY-MM-DD" value={cashFrom} onChangeText={setCashFrom} />
+        <TextInput label="Thu/hoàn đến YYYY-MM-DD" value={cashTo} onChangeText={setCashTo} />
+        <TextInput label="Số dư đến YYYY-MM-DD" value={asOf} onChangeText={setAsOf} />
+        <Button loading={metricsLoading} disabled={metricsLoading} onPress={loadMetrics}>Đối chiếu sổ</Button>
+      </View>}
       {user?.role !== 'TENANT' && metrics && (
         <>
           <View style={styles.sectionHeaderRow}>
@@ -344,6 +352,8 @@ export const HomeScreen: React.FC<HomeScreenProps> = ({
       )}
 
       {/* Action Cards */}
+      {user?.role === 'OWNER' && <Button icon="account-group" onPress={onNavigateToUsers}>Nhân viên và phân công</Button>}
+      {user?.role !== 'TENANT' && <Button icon="history" onPress={onNavigateToAudit}>Nhật ký giao dịch</Button>}
       <Text variant="titleMedium" style={styles.sectionTitle}>
         {user?.role === 'TENANT' ? 'Dịch vụ cư dân' : 'Quản lý vận hành'}
       </Text>

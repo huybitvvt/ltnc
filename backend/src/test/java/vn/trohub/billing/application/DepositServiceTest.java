@@ -72,6 +72,10 @@ class DepositServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(invoiceRepository.findForUpdate(any())).thenAnswer(call -> invoiceRepository.findById(call.getArgument(0)));
+        lenient().when(contractRepository.findForUpdate(any())).thenAnswer(call -> Optional.of(contract));
+        lenient().when(operationRepository.save(any())).thenAnswer(call -> call.getArgument(0));
+
         depositService = new DepositService(
                 contractRepository,
                 depositLedgerEntryRepository,
@@ -116,7 +120,7 @@ class DepositServiceTest {
     @Test
     @DisplayName("Thu tiền cọc thành công: lưu entry RECEIPT, đổi status sang HOLDING")
     void testRecordDepositReceipt_Success() {
-        when(contractRepository.findById(contract.getId())).thenReturn(Optional.of(contract));
+        when(contractRepository.findForUpdate(contract.getId())).thenReturn(Optional.of(contract));
         when(userRepository.findById(ownerPrincipal.getId())).thenReturn(Optional.of(ownerUser));
         when(depositLedgerEntryRepository.sumAmountByContractId(contract.getId())).thenReturn(new BigDecimal("3000000"));
         when(depositLedgerEntryRepository.sumTotalReceiptByContractId(contract.getId())).thenReturn(new BigDecimal("3000000"));
@@ -192,8 +196,7 @@ class DepositServiceTest {
 
         when(depositLedgerEntryRepository.findById(origEntry.getId())).thenReturn(Optional.of(origEntry));
         when(userRepository.findById(ownerPrincipal.getId())).thenReturn(Optional.of(ownerUser));
-        // Hiện tại chỉ còn 1.000.000 mà sửa giảm 1.500.000
-        when(depositLedgerEntryRepository.sumAmountByContractId(contract.getId())).thenReturn(new BigDecimal("1000000"));
+        // Giảm vượt phiếu thu gốc phải bị chặn trước khi đọc số dư toàn hợp đồng.
 
         CorrectDepositReceiptRequest request = new CorrectDepositReceiptRequest(
                 origEntry.getId(),
@@ -208,7 +211,7 @@ class DepositServiceTest {
     @Test
     @DisplayName("EX-15: Cọc đã nhận 3.000.000; khấu trừ 500.000; hoàn 2.500.000 -> Giữ 0, khấu trừ 500000, hoàn 2500000")
     void testDeductDeposit_And_Refund_EX15() {
-        when(contractRepository.findById(contract.getId())).thenReturn(Optional.of(contract));
+        when(contractRepository.findForUpdate(contract.getId())).thenReturn(Optional.of(contract));
         when(userRepository.findById(ownerPrincipal.getId())).thenReturn(Optional.of(ownerUser));
 
         // 1. Khấu trừ 500.000 do hỏng vòi nước
@@ -255,7 +258,7 @@ class DepositServiceTest {
     @Test
     @DisplayName("EX-16: Cọc giữ 3.000.000; hóa đơn nợ 500.000; bù cọc 500.000 -> cọc giữ 2.500.000, hóa đơn hết nợ")
     void testOffsetDepositToInvoice_EX16() {
-        when(contractRepository.findById(contract.getId())).thenReturn(Optional.of(contract));
+        when(contractRepository.findForUpdate(contract.getId())).thenReturn(Optional.of(contract));
         when(invoiceRepository.findById(invoice.getId())).thenReturn(Optional.of(invoice));
         when(userRepository.findById(ownerPrincipal.getId())).thenReturn(Optional.of(ownerUser));
 
@@ -295,7 +298,7 @@ class DepositServiceTest {
     @DisplayName("BR-120: Xác nhận quyết toán cọc thành công khi hợp đồng ENDED và depositHeld == 0")
     void testSettleDeposit_Success_WhenEndedAndZeroHeld() {
         contract.setStatus(ContractStatus.ENDED);
-        when(contractRepository.findById(contract.getId())).thenReturn(Optional.of(contract));
+        when(contractRepository.findForUpdate(contract.getId())).thenReturn(Optional.of(contract));
         when(userRepository.findById(ownerPrincipal.getId())).thenReturn(Optional.of(ownerUser));
         when(depositLedgerEntryRepository.sumAmountByContractId(contract.getId())).thenReturn(BigDecimal.ZERO);
 
@@ -312,7 +315,7 @@ class DepositServiceTest {
     @DisplayName("BR-120: Từ chối quyết toán khi hợp đồng chưa ENDED")
     void testSettleDeposit_NotEnded_ThrowsException() {
         contract.setStatus(ContractStatus.ACTIVE);
-        when(contractRepository.findById(contract.getId())).thenReturn(Optional.of(contract));
+        when(contractRepository.findForUpdate(contract.getId())).thenReturn(Optional.of(contract));
         when(userRepository.findById(ownerPrincipal.getId())).thenReturn(Optional.of(ownerUser));
 
         SettleDepositRequest request = new SettleDepositRequest(contract.getId(), "Quyết toán sớm");
@@ -325,7 +328,7 @@ class DepositServiceTest {
     @DisplayName("BR-120: Từ chối quyết toán khi hợp đồng ENDED nhưng số dư cọc chưa bằng 0")
     void testSettleDeposit_NonZeroHeld_ThrowsException() {
         contract.setStatus(ContractStatus.ENDED);
-        when(contractRepository.findById(contract.getId())).thenReturn(Optional.of(contract));
+        when(contractRepository.findForUpdate(contract.getId())).thenReturn(Optional.of(contract));
         when(userRepository.findById(ownerPrincipal.getId())).thenReturn(Optional.of(ownerUser));
         when(depositLedgerEntryRepository.sumAmountByContractId(contract.getId())).thenReturn(new BigDecimal("1000000"));
 

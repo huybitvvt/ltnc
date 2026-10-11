@@ -30,6 +30,9 @@ import java.util.UUID;
 
 @Service
 public class TenancyService {
+    private java.time.Clock clock = java.time.Clock.system(java.time.ZoneId.of("Asia/Ho_Chi_Minh"));
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setClock(java.time.Clock clock) { this.clock = clock; }
 
     private static final Logger log = LoggerFactory.getLogger(TenancyService.class);
 
@@ -72,7 +75,8 @@ public class TenancyService {
     // ==========================================
 
     @Transactional
-    public TenantSummary createTenantProfile(CreateTenantRequest request) {
+    public TenantSummary createTenantProfile(CreateTenantRequest request, UserPrincipal actor) {
+        verifyManagerRole(actor);
         String masked = maskCitizenId(request.citizenId());
         TenantProfile profile = new TenantProfile(
                 request.fullName().trim(),
@@ -80,23 +84,33 @@ public class TenancyService {
                 masked,
                 request.email() != null ? request.email().trim() : null
         );
+        profile.setCreatedBy(actor.getId());
         profile = tenantProfileRepository.save(profile);
         return toTenantSummary(profile);
     }
 
-    public TenantSummary getTenantProfile(UUID tenantId) {
+    public TenantSummary getTenantProfile(UUID tenantId, UserPrincipal actor) {
+        requireProfileScope(tenantId, actor);
         TenantProfile profile = tenantProfileRepository.findById(tenantId)
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy hồ sơ người thuê: " + tenantId));
         return toTenantSummary(profile);
     }
 
-    public Page<TenantSummary> searchTenants(String query, Pageable pageable) {
-        return tenantProfileRepository.searchTenants(query, pageable).map(this::toTenantSummary);
+    public Page<TenantSummary> searchTenants(String query, Pageable pageable, UserPrincipal actor) {
+        verifyManagerRole(actor);
+        return (actor.isOwner() ? tenantProfileRepository.searchTenants(query, pageable)
+                : tenantProfileRepository.searchInStaffScope(query, actor.getId(), pageable)).map(this::toTenantSummary);
+    }
+
+    private void requireProfileScope(UUID id, UserPrincipal actor) {
+        verifyManagerRole(actor);
+        if (!actor.isOwner() && !tenantProfileRepository.inStaffScope(id, actor.getId()))
+            throw new AccessDeniedException("Hồ sơ người thuê ngoài phạm vi được giao");
     }
 
     @Transactional
     public TenantInviteResponse issueTenantInvite(UUID tenantId, UserPrincipal actor) {
-        verifyManagerRole(actor);
+        requireProfileScope(tenantId, actor);
 
         TenantProfile profile = tenantProfileRepository.findById(tenantId)
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy hồ sơ người thuê: " + tenantId));
@@ -118,8 +132,8 @@ public class TenancyService {
             tenantProfileRepository.save(profile);
         }
 
-        String rawCode = authService.createInvite(manager, tenantUser, InvitePurpose.TENANT_INVITE);
-        Instant expiresAt = Instant.now().plus(24, ChronoUnit.HOURS);
+        String rawCode = authService.createInvite(manager, tenantUser, tenantUser.isEnabled() ? InvitePurpose.PASSWORD_RESET : InvitePurpose.TENANT_INVITE);
+        Instant expiresAt = clock.instant().plus(24, ChronoUnit.HOURS);
 
         return new TenantInviteResponse(rawCode, expiresAt);
     }
@@ -131,6 +145,7 @@ public class TenancyService {
     @Transactional
     public ContractSummary createContractDraft(CreateContractRequest request, UserPrincipal actor) {
         verifyManagerRole(actor);
+        requireProfileScope(request.representativeTenantId(), actor);
 
         Room room = roomRepository.findById(request.roomId())
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy phòng: " + request.roomId()));
@@ -296,7 +311,7 @@ public class TenancyService {
     public ContractSummary checkoutContract(UUID contractId, CheckoutContractRequest request, UserPrincipal actor) {
         verifyManagerRole(actor);
 
-        Contract contract = contractRepository.findById(contractId)
+        Contract contract = contractRepository.findForUpdate(contractId)
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy hợp đồng: " + contractId));
 
         Room room = contract.getRoom();
@@ -312,6 +327,11 @@ public class TenancyService {
 
         User actorUser = userRepository.findById(actor.getId())
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy người dùng hiện tại"));
+        if (request.actualCheckoutDate().isAfter(LocalDate.now(clock)))
+            throw new IllegalArgumentException("Ngày trả phòng không được ở tương lai");
+        java.util.Set<UUID> requiredMeters = roomMeterRepository.findByRoomId(room.getId()).stream()
+                .filter(RoomMeter::isActive).map(RoomMeter::getId).collect(java.util.stream.Collectors.toSet());
+        java.util.Set<UUID> suppliedMeters = new java.util.HashSet<>();
 
         if (request.finalReadings() != null) {
             for (HandoverReadingItem item : request.finalReadings()) {
@@ -321,6 +341,15 @@ public class TenancyService {
                 } else if (item.meterType() != null) {
                     meter = roomMeterRepository.findByRoomIdAndType(room.getId(), item.meterType()).orElse(null);
                 }
+                if (meter == null || !meter.getRoom().getId().equals(room.getId()))
+                    throw new IllegalArgumentException("Công tơ không thuộc phòng trả");
+                if (!request.actualCheckoutDate().equals(item.readingDate()) || item.value() == null || item.value().signum() < 0)
+                    throw new IllegalArgumentException("Chỉ số cuối phải ghi đúng ngày trả phòng và không âm");
+                if (!suppliedMeters.add(meter.getId())) throw new IllegalArgumentException("Công tơ cuối bị trùng");
+                var previous = meterReadingRepository.findByMeterIdOrderByReadingDateDesc(meter.getId()).stream()
+                        .filter(reading -> !reading.getReadingDate().isAfter(item.readingDate())).findFirst();
+                if (previous.isPresent() && item.value().compareTo(previous.get().getValue()) < 0)
+                    throw new IllegalArgumentException("Chỉ số cuối không được giảm");
                 if (meter != null) {
                     MeterReading reading = new MeterReading(
                             meter,
@@ -333,6 +362,7 @@ public class TenancyService {
                 }
             }
         }
+        if (!suppliedMeters.containsAll(requiredMeters)) throw new IllegalArgumentException("Thiếu chỉ số công tơ cuối khi trả phòng");
 
         // Kết thúc cư trú của tất cả thành viên trong phòng (BR-043, BR-045)
         List<ContractMember> members = contractMemberRepository.findByContractIdOrderByJoinedOnAsc(contract.getId());
@@ -345,7 +375,7 @@ public class TenancyService {
 
         contract.setStatus(ContractStatus.ENDED);
         contract.setActualCheckoutDate(request.actualCheckoutDate());
-        if (contract.getDepositStatus() == DepositStatus.HOLDING) {
+        if (contract.getDepositStatus() != DepositStatus.SETTLED) {
             contract.setDepositStatus(DepositStatus.SETTLING);
         }
         room.setStatus(RoomStatus.VACANT);
@@ -373,6 +403,7 @@ public class TenancyService {
     @Transactional
     public ContractMemberResponse addContractMember(UUID contractId, AddMemberRequest request, UserPrincipal actor) {
         verifyManagerRole(actor);
+        requireProfileScope(request.tenantId(), actor);
 
         Contract contract = contractRepository.findById(contractId)
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy hợp đồng: " + contractId));

@@ -58,9 +58,15 @@ public class TenancyDtos {
             LocalDate plannedEndExclusive,
 
             @NotNull(message = "Giá thuê không được để trống")
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal rent,
 
             @NotNull(message = "Tiền cọc không được để trống")
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal depositRequired
     ) {}
 

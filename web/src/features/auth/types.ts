@@ -19,6 +19,7 @@ export interface LoginResponseData {
 export interface ApiResponse<T> {
   success: boolean;
   data: T;
+  meta?: { page?: number; size?: number; totalElements?: number; totalPages?: number; traceId?: string };
   message?: string;
   timestamp?: string;
 }

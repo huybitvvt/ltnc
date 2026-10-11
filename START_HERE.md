@@ -10,7 +10,7 @@
 - Nếu dùng Gemini CLI, file GEMINI.md cung cấp context dự án. Kiểm tra context thực tế đã nạp bằng chức năng quản lý memory/context của phiên bản CLI đang dùng.
 - Không cần bảo Gemini đọc Word gốc mỗi phiên; những thay đổi đã được hợp nhất vào bộ Markdown này.
 
-Bộ này là **kế hoạch triển khai**, không có source app, database hoặc APK sẵn.
+Repository hiện có source `backend/`, `web/`, `mobile/` và Flyway migrations. Đọc [STATUS](docs/STATUS.md) để biết kết quả kiểm tra thực tế, rồi [IMPLEMENTATION_REVIEW](docs/IMPLEMENTATION_REVIEW.md) để đối chiếu phần chưa đạt. APK Android đang được hoãn theo yêu cầu; không coi Hermes bundle là APK.
 
 ## 2. Prompt khởi động — sao chép nguyên khối
 
@@ -46,7 +46,7 @@ task hiện tại, file đang sửa, lệnh đã chạy, kết quả, lỗi còn
 việc cụ thể tiếp theo. Nếu một kiểm tra bị thiếu môi trường, ghi BLOCKED
 cho kiểm tra đó và làm các việc độc lập còn lại; không báo toàn dự án xong.
 
-Bắt đầu ngay bằng kiểm tra hiện trạng và task A0.
+Bắt đầu bằng kiểm tra hiện trạng và task còn dở trong STATUS; không làm lại scaffold đã có.
 ```
 
 ## 3. Prompt tiếp tục sau khi hết phiên

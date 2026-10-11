@@ -1,0 +1,14 @@
+> trohub-web@1.0.0 test:run
+> vitest run --maxWorkers=1
+
+
+ RUN  v3.2.7 E:/ltnc/web
+
+ ✓ src/shared/money.test.ts (3 tests) 70ms
+ ✓ src/shared/api/client.test.ts (2 tests) 52ms
+ ✓ src/shared/date.test.ts (1 test) 35ms
+
+ Test Files  3 passed (3)
+      Tests  6 passed (6)
+   Start at  12:16:07
+   Duration  1.82s (transform 182ms, setup 0ms, collect 422ms, tests 158ms, environment 1ms, prepare 453ms)

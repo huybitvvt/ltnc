@@ -23,9 +23,10 @@ public class PaymentController {
     }
 
     @PostMapping("/payments/record")
+    @PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
     public ResponseEntity<ApiResponse<InvoiceFinancialStatusResponse>> recordPayment(
             @Valid @RequestBody RecordPaymentRequest request,
-            @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader("X-Idempotency-Key") String idempotencyKey,
             @AuthenticationPrincipal UserPrincipal user) {
         InvoiceFinancialStatusResponse response = paymentService.recordPayment(request, user, idempotencyKey);
         return ResponseEntity.ok(ApiResponse.ok(response));
@@ -35,7 +36,7 @@ public class PaymentController {
     @PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
     public ResponseEntity<ApiResponse<InvoiceFinancialStatusResponse>> correctPayment(
             @Valid @RequestBody PaymentCorrectionRequest request,
-            @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader("X-Idempotency-Key") String idempotencyKey,
             @AuthenticationPrincipal UserPrincipal user) {
         InvoiceFinancialStatusResponse response = paymentService.correctPayment(request, user, idempotencyKey);
         return ResponseEntity.ok(ApiResponse.ok(response));
@@ -45,7 +46,7 @@ public class PaymentController {
     @PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
     public ResponseEntity<ApiResponse<InvoiceFinancialStatusResponse>> refundCredit(
             @Valid @RequestBody RefundRequest request,
-            @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader("X-Idempotency-Key") String idempotencyKey,
             @AuthenticationPrincipal UserPrincipal user) {
         InvoiceFinancialStatusResponse response = paymentService.refundInvoiceCredit(request, user, idempotencyKey);
         return ResponseEntity.ok(ApiResponse.ok(response));
@@ -55,7 +56,7 @@ public class PaymentController {
     @PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
     public ResponseEntity<ApiResponse<InvoiceFinancialStatusResponse>> transferCredit(
             @Valid @RequestBody TransferCreditRequest request,
-            @RequestHeader(value = "X-Idempotency-Key", required = false) String idempotencyKey,
+            @RequestHeader("X-Idempotency-Key") String idempotencyKey,
             @AuthenticationPrincipal UserPrincipal user) {
         InvoiceFinancialStatusResponse response = paymentService.transferCredit(request, user, idempotencyKey);
         return ResponseEntity.ok(ApiResponse.ok(response));

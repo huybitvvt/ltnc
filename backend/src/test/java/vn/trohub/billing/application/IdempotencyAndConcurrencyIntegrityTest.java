@@ -65,6 +65,8 @@ class IdempotencyAndConcurrencyIntegrityTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(invoiceRepository.findForUpdate(any())).thenAnswer(call -> invoiceRepository.findById(call.getArgument(0)));
+
         paymentService = new PaymentService(
                 invoiceRepository,
                 adjustmentRepository,
@@ -130,7 +132,7 @@ class IdempotencyAndConcurrencyIntegrityTest {
                 "Nộp đợt 1"
         );
 
-        String rawPayload = "PAYMENT:" + invoice.getId().toString() + ":1000000:TXN-001";
+        String rawPayload = "PAYMENT:" + request;
         String expectedHash = sha256(rawPayload);
 
         FinancialOperation existingOp = new FinancialOperation(
@@ -143,9 +145,7 @@ class IdempotencyAndConcurrencyIntegrityTest {
         );
 
         when(invoiceRepository.findById(invoice.getId())).thenReturn(Optional.of(invoice));
-        when(userRepository.findById(ownerPrincipal.getId())).thenReturn(Optional.of(ownerUser));
-        when(operationRepository.findByIdempotencyKey(key)).thenReturn(Optional.of(existingOp));
-        when(ledgerEntryRepository.sumAmountByInvoiceId(invoice.getId())).thenReturn(new BigDecimal("1000000"));
+        when(operationRepository.findByActorIdAndIdempotencyKey(ownerPrincipal.getId(), key)).thenReturn(Optional.of(existingOp));
 
         InvoiceFinancialStatusResponse response = paymentService.recordPayment(request, ownerPrincipal, key);
 
@@ -173,8 +173,8 @@ class IdempotencyAndConcurrencyIntegrityTest {
         );
 
         when(invoiceRepository.findById(invoice.getId())).thenReturn(Optional.of(invoice));
-        when(userRepository.findById(ownerPrincipal.getId())).thenReturn(Optional.of(ownerUser));
-        when(operationRepository.findByIdempotencyKey(key)).thenReturn(Optional.of(existingOp));
+
+        when(operationRepository.findByActorIdAndIdempotencyKey(ownerPrincipal.getId(), key)).thenReturn(Optional.of(existingOp));
 
         RecordPaymentRequest newRequestWithDifferentPayload = new RecordPaymentRequest(
                 invoice.getId(),
@@ -184,7 +184,7 @@ class IdempotencyAndConcurrencyIntegrityTest {
                 "Nộp đợt 1 khác số tiền"
         );
 
-        assertThrows(IllegalStateException.class, () ->
+        assertThrows(vn.trohub.common.api.ConflictException.class, () ->
                 paymentService.recordPayment(newRequestWithDifferentPayload, ownerPrincipal, key)
         );
     }
@@ -207,6 +207,7 @@ class IdempotencyAndConcurrencyIntegrityTest {
         originalEntry.setId(UUID.randomUUID());
 
         when(ledgerEntryRepository.findById(originalEntry.getId())).thenReturn(Optional.of(originalEntry));
+        when(invoiceRepository.findById(invoice.getId())).thenReturn(Optional.of(invoice));
 
         // Phiếu gốc chỉ có 1.000.000đ nhưng yêu cầu đính chính giảm -1.500.000đ (dẫn tới âm 500k)
         PaymentCorrectionRequest request = new PaymentCorrectionRequest(

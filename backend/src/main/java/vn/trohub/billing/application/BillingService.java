@@ -55,6 +55,9 @@ public class BillingService {
     private final BuildingStaffAssignmentRepository staffAssignmentRepository;
     private final UserRepository userRepository;
     private final ObjectMapper objectMapper;
+    private java.time.Clock clock = java.time.Clock.system(ZoneId.of("Asia/Ho_Chi_Minh"));
+    @org.springframework.beans.factory.annotation.Autowired
+    public void setClock(java.time.Clock clock) { this.clock = clock; }
 
     public BillingService(
             InvoiceRepository invoiceRepository,
@@ -92,7 +95,7 @@ public class BillingService {
         this.oneOffChargeRepository = oneOffChargeRepository;
         this.staffAssignmentRepository = staffAssignmentRepository;
         this.userRepository = userRepository;
-        this.objectMapper = objectMapper;
+        this.objectMapper = objectMapper.findAndRegisterModules();
     }
 
     @Transactional(readOnly = true)
@@ -133,7 +136,7 @@ public class BillingService {
                 null,
                 contract.getId(),
                 contract.getRoom().getRoomNumber(),
-                contract.getRoom().getFloor().getBuilding().getName(),
+                contract.getRoom().getBuilding().getName(),
                 contract.getRepresentativeTenant().getFullName(),
                 billingMonth,
                 InvoiceStatus.DRAFT,
@@ -204,40 +207,37 @@ public class BillingService {
 
     @Transactional
     public InvoiceDetailResponse issueInvoice(UUID invoiceId, String idempotencyKey, UserPrincipal user) {
-        Invoice invoice = invoiceRepository.findById(invoiceId)
+        if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 100) throw new IllegalArgumentException("X-Idempotency-Key bắt buộc");
+        financialOperationRepository.lockKey(user.getId() + ":" + idempotencyKey);
+        Invoice invoice = invoiceRepository.findForUpdate(invoiceId)
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy hóa đơn: " + invoiceId));
 
-        validateManagerScope(invoice.getContract().getRoom().getFloor().getBuilding().getId(), user);
-
-        if (invoice.getStatus() == InvoiceStatus.ISSUED) {
-            return mapToDetailResponse(invoice);
-        }
+        validateManagerScope(invoice.getContract().getRoom().getBuilding().getId(), user);
 
         // Kiểm tra Idempotency
         String requestHash = computeHash("INVOICE_ISSUE:" + invoiceId);
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-            Optional<FinancialOperation> existingOp = financialOperationRepository.findByIdempotencyKey(idempotencyKey);
+            Optional<FinancialOperation> existingOp = financialOperationRepository.findByActorIdAndIdempotencyKey(user.getId(), idempotencyKey);
             if (existingOp.isPresent()) {
                 FinancialOperation op = existingOp.get();
                 if (!op.getRequestHash().equals(requestHash)) {
-                    throw new IllegalStateException("Idempotency-Key đã được sử dụng với yêu cầu khác (BR-103)");
+                    throw new vn.trohub.common.api.ConflictException("Idempotency-Key đã được sử dụng với yêu cầu khác (BR-103)");
                 }
                 try {
                     return objectMapper.readValue(op.getResponseSnapshot(), InvoiceDetailResponse.class);
                 } catch (Exception e) {
-                    return mapToDetailResponse(invoice);
+                    throw new IllegalStateException("Không đọc được kết quả đã lưu", e);
                 }
             }
         }
 
+        if (invoice.getStatus() != InvoiceStatus.ISSUED) {
         // Tính toán kiểm tra chặt chẽ trước khi phát hành (closed interval, đầy đủ chỉ số, cảnh báo đã xác nhận)
         InvoiceCalculationResult calc = calculateInvoice(invoice.getContract(), invoice.getBillingMonth(), true);
 
         invoice.setPeriodStart(calc.periodStart());
         invoice.setPeriodEndExclusive(calc.periodEndExclusive());
         invoice.setDueDate(calc.dueDate());
-        invoice.setStatus(InvoiceStatus.ISSUED);
-        invoice.setIssuedAt(Instant.now());
         invoice.clearItems();
 
         for (CalculationItem item : calc.items()) {
@@ -256,6 +256,10 @@ public class BillingService {
         }
 
         invoice = invoiceRepository.save(invoice);
+        invoiceRepository.flush();
+        invoice.setStatus(InvoiceStatus.ISSUED);
+        invoice.setIssuedAt(clock.instant());
+        }
         InvoiceDetailResponse response = mapToDetailResponse(invoice);
 
         // Lưu FinancialOperation
@@ -273,7 +277,7 @@ public class BillingService {
                         responseSnapshot
                 );
                 financialOperationRepository.save(op);
-            } catch (Exception ignored) {}
+            } catch (Exception ex) { throw new IllegalStateException("Không lưu được kết quả giao dịch", ex); }
         }
 
         return response;
@@ -281,10 +285,13 @@ public class BillingService {
 
     @Transactional
     public InvoiceDetailResponse adjustInvoice(UUID invoiceId, BigDecimal deltaAmount, String reason, LocalDate effectiveDate, String idempotencyKey, UserPrincipal user) {
-        Invoice invoice = invoiceRepository.findById(invoiceId)
+        vn.trohub.common.money.Money.requireWhole(deltaAmount);
+        if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 100) throw new IllegalArgumentException("X-Idempotency-Key bắt buộc");
+        financialOperationRepository.lockKey(user.getId() + ":" + idempotencyKey);
+        Invoice invoice = invoiceRepository.findForUpdate(invoiceId)
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy hóa đơn: " + invoiceId));
 
-        validateManagerScope(invoice.getContract().getRoom().getFloor().getBuilding().getId(), user);
+        validateManagerScope(invoice.getContract().getRoom().getBuilding().getId(), user);
 
         if (invoice.getStatus() != InvoiceStatus.ISSUED) {
             throw new IllegalStateException("Chỉ hóa đơn đã phát hành (ISSUED) mới có thể điều chỉnh (BR-080)");
@@ -294,23 +301,26 @@ public class BillingService {
             throw new IllegalArgumentException("Số tiền điều chỉnh phải khác 0 (BR-081)");
         }
 
+        if (reason == null || reason.isBlank()) throw new IllegalArgumentException("Lý do điều chỉnh bắt buộc");
         // Kiểm tra Idempotency
-        String requestHash = computeHash("INVOICE_ADJUST:" + invoiceId + ":" + deltaAmount + ":" + effectiveDate);
+        String requestHash = computeHash("INVOICE_ADJUST:" + invoiceId + ":" + deltaAmount + ":" + effectiveDate + ":" + reason);
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
-            Optional<FinancialOperation> existingOp = financialOperationRepository.findByIdempotencyKey(idempotencyKey);
+            Optional<FinancialOperation> existingOp = financialOperationRepository.findByActorIdAndIdempotencyKey(user.getId(), idempotencyKey);
             if (existingOp.isPresent()) {
                 FinancialOperation op = existingOp.get();
                 if (!op.getRequestHash().equals(requestHash)) {
-                    throw new IllegalStateException("Idempotency-Key đã được sử dụng với yêu cầu khác (BR-103)");
+                    throw new vn.trohub.common.api.ConflictException("Idempotency-Key đã được sử dụng với yêu cầu khác (BR-103)");
                 }
                 try {
                     return objectMapper.readValue(op.getResponseSnapshot(), InvoiceDetailResponse.class);
                 } catch (Exception e) {
-                    return mapToDetailResponse(invoice);
+                    throw new IllegalStateException("Không đọc được kết quả đã lưu", e);
                 }
             }
         }
 
+        if (effectiveDate == null || !effectiveDate.equals(LocalDate.now(clock)))
+            throw new IllegalArgumentException("Điều chỉnh hóa đơn có hiệu lực ngày hiện tại");
         BigDecimal originalTotal = invoice.getItems().stream()
                 .map(InvoiceItem::getAmount)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -371,7 +381,7 @@ public class BillingService {
         try {
             op.setResponseSnapshot(objectMapper.writeValueAsString(response));
             financialOperationRepository.save(op);
-        } catch (Exception ignored) {}
+        } catch (Exception ex) { throw new IllegalStateException("Không lưu được kết quả giao dịch", ex); }
 
         return response;
     }
@@ -381,7 +391,7 @@ public class BillingService {
         Invoice invoice = invoiceRepository.findById(invoiceId)
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy hóa đơn: " + invoiceId));
 
-        validateManagerScope(invoice.getContract().getRoom().getFloor().getBuilding().getId(), user);
+        validateManagerScope(invoice.getContract().getRoom().getBuilding().getId(), user);
 
         User actor = userRepository.findById(user.getId())
                 .orElseThrow(() -> new NoSuchElementException("Không tìm thấy người dùng"));
@@ -403,7 +413,7 @@ public class BillingService {
             // Kiểm tra tenant thuộc hợp đồng
             validateTenantContractAccess(invoice.getContract(), user);
         } else if (user.isStaff()) {
-            validateManagerScope(invoice.getContract().getRoom().getFloor().getBuilding().getId(), user);
+            validateManagerScope(invoice.getContract().getRoom().getBuilding().getId(), user);
         }
 
         return mapToDetailResponse(invoice);
@@ -432,13 +442,8 @@ public class BillingService {
             if (buildingId != null && !assignedBuildingIds.contains(buildingId)) {
                 return Page.empty(pageable);
             }
-            // Nếu không chọn buildingId, lọc trong các tòa được giao
-            Page<Invoice> invoices = invoiceRepository.searchInvoices(contractId, buildingId, billingMonth, status, pageable);
-            List<InvoiceSummaryResponse> filtered = invoices.getContent().stream()
-                    .filter(i -> assignedBuildingIds.contains(i.getContract().getRoom().getFloor().getBuilding().getId()))
-                    .map(this::mapToSummaryResponse)
-                    .toList();
-            return new PageImpl<>(filtered, pageable, filtered.size());
+            return invoiceRepository.searchInvoicesByBuildings(assignedBuildingIds, contractId, buildingId,
+                    billingMonth, status, pageable).map(this::mapToSummaryResponse);
         }
 
         Page<Invoice> invoices = invoiceRepository.searchInvoices(contractId, buildingId, billingMonth, status, pageable);
@@ -455,13 +460,17 @@ public class BillingService {
         int totalDaysInMonth = ym.lengthOfMonth();
 
         LocalDate contractStart = contract.getActualStartDate();
+        if (contractStart == null) throw new IllegalStateException("Hợp đồng chưa được kích hoạt");
         LocalDate periodStart = contractStart.isAfter(monthStart) ? contractStart : monthStart;
 
         LocalDate contractEnd = contract.getActualCheckoutDate() != null ? contract.getActualCheckoutDate() :
                 (contract.getStatus() == ContractStatus.ENDED ? contract.getPlannedEndExclusive() : monthEndExclusive);
         LocalDate periodEndExclusive = contractEnd.isBefore(monthEndExclusive) ? contractEnd : monthEndExclusive;
 
-        long activeDays = Math.max(0, ChronoUnit.DAYS.between(periodStart, periodEndExclusive));
+        long activeDays = ChronoUnit.DAYS.between(periodStart, periodEndExclusive);
+        if (activeDays <= 0) throw new IllegalArgumentException("Hợp đồng không có ngày ở trong kỳ");
+        if (isIssuing && periodEndExclusive.isAfter(LocalDate.now(clock)))
+            throw new vn.trohub.common.api.ConflictException("Chỉ được phát hành sau khi kỳ thuê đã kết thúc");
 
         List<CalculationItem> items = new ArrayList<>();
 
@@ -485,7 +494,7 @@ public class BillingService {
         ));
 
         // 2. Điện và Nước (METERED)
-        UUID buildingId = contract.getRoom().getFloor().getBuilding().getId();
+        UUID buildingId = contract.getRoom().getBuilding().getId();
         List<RoomMeter> meters = roomMeterRepository.findByRoomId(contract.getRoom().getId());
 
         for (RoomMeter meter : meters) {
@@ -496,13 +505,13 @@ public class BillingService {
 
             // Tìm chỉ số đầu kỳ
             MeterReading startReading = readings.stream()
-                    .filter(r -> !r.getReadingDate().isAfter(periodStart))
+                    .filter(r -> r.getReadingDate().equals(periodStart))
                     .reduce((first, second) -> second)
                     .orElse(null);
 
             // Tìm chỉ số cuối kỳ
             MeterReading endReading = readings.stream()
-                    .filter(r -> !r.getReadingDate().isBefore(periodEndExclusive.minusDays(1)))
+                    .filter(r -> r.getReadingDate().equals(periodEndExclusive))
                     .findFirst()
                     .orElse(null);
 
@@ -536,6 +545,7 @@ public class BillingService {
             }
 
             Tariff tariff = findApplicableTariff(buildingId, meter.getType(), billingMonth);
+            if (isIssuing && tariff == null) throw new IllegalStateException("Thiếu đơn giá cho kỳ");
             BigDecimal unitPrice = tariff != null ? tariff.getUnitPrice() : BigDecimal.ZERO;
             BigDecimal meterAmount = usage.multiply(unitPrice).setScale(0, RoundingMode.HALF_UP);
 
@@ -573,6 +583,7 @@ public class BillingService {
 
             ServiceDefinition sDef = sub.getService();
             Tariff tariff = findApplicableTariffByServiceId(buildingId, sDef.getId(), billingMonth);
+            if (isIssuing && tariff == null) throw new IllegalStateException("Thiếu đơn giá cho kỳ");
             BigDecimal unitPrice = tariff != null ? tariff.getUnitPrice() : BigDecimal.ZERO;
 
             if (sDef.getCalculationType() == ServiceCalculationType.ROOM_MONTHLY) {
@@ -647,7 +658,7 @@ public class BillingService {
         // 5. Ngày đến hạn
         BuildingBillingSettings settings = settingsRepository.findByBuildingId(buildingId).orElse(null);
         int dueDays = settings != null ? settings.getDueDays() : 7;
-        LocalDate dueDate = LocalDate.now().plusDays(dueDays);
+        LocalDate dueDate = LocalDate.now(clock).plusDays(dueDays);
 
         return new InvoiceCalculationResult(periodStart, periodEndExclusive, dueDate, items);
     }
@@ -749,7 +760,7 @@ public class BillingService {
                 invoice.getId(),
                 invoice.getContract().getId(),
                 invoice.getContract().getRoom().getRoomNumber(),
-                invoice.getContract().getRoom().getFloor().getBuilding().getName(),
+                invoice.getContract().getRoom().getBuilding().getName(),
                 invoice.getContract().getRepresentativeTenant().getFullName(),
                 invoice.getBillingMonth(),
                 invoice.getStatus(),
@@ -805,7 +816,7 @@ public class BillingService {
                 invoice.getId(),
                 invoice.getContract().getId(),
                 invoice.getContract().getRoom().getRoomNumber(),
-                invoice.getContract().getRoom().getFloor().getBuilding().getName(),
+                invoice.getContract().getRoom().getBuilding().getName(),
                 invoice.getContract().getRepresentativeTenant().getFullName(),
                 invoice.getBillingMonth(),
                 invoice.getStatus(),
@@ -823,7 +834,7 @@ public class BillingService {
         if (user.isTenant()) {
             validateTenantContractAccess(contract, user);
         } else if (user.isStaff()) {
-            validateManagerScope(contract.getRoom().getFloor().getBuilding().getId(), user);
+            validateManagerScope(contract.getRoom().getBuilding().getId(), user);
         }
         return contract;
     }

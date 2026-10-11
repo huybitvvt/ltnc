@@ -85,6 +85,8 @@ class BillingServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(invoiceRepository.findForUpdate(any())).thenAnswer(call -> invoiceRepository.findById(call.getArgument(0)));
+
         billingService = new BillingService(
                 invoiceRepository,
                 invoiceItemRepository,
@@ -247,7 +249,7 @@ class BillingServiceTest {
         when(roomMeterRepository.findByRoomId(room.getId())).thenReturn(List.of(meter));
         when(meterReadingRepository.findByMeterIdOrderByReadingDateDesc(meter.getId())).thenReturn(List.of(rEnd, rStart));
 
-        assertThatThrownBy(() -> billingService.issueInvoice(draft.getId(), null, ownerPrincipal))
+        assertThatThrownBy(() -> billingService.issueInvoice(draft.getId(), "fixture-issue", ownerPrincipal))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("INVALID_METER_READING");
     }
@@ -268,7 +270,7 @@ class BillingServiceTest {
         when(meterReadingRepository.findByMeterIdOrderByReadingDateDesc(meter.getId())).thenReturn(List.of(rEnd, rStart));
         when(consumptionAlertRepository.findByContractId(contract.getId())).thenReturn(List.of(unackedAlert));
 
-        assertThatThrownBy(() -> billingService.issueInvoice(draft.getId(), null, ownerPrincipal))
+        assertThatThrownBy(() -> billingService.issueInvoice(draft.getId(), "fixture-issue", ownerPrincipal))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("chưa được giải trình xác nhận");
     }
@@ -282,7 +284,7 @@ class BillingServiceTest {
 
         when(invoiceRepository.findById(issued.getId())).thenReturn(Optional.of(issued));
 
-        assertThatThrownBy(() -> billingService.adjustInvoice(issued.getId(), BigDecimal.valueOf(-100001), "Giảm quá mức", LocalDate.now(), null, ownerPrincipal))
+        assertThatThrownBy(() -> billingService.adjustInvoice(issued.getId(), BigDecimal.valueOf(-100001), "Giảm quá mức", LocalDate.now(), "fixture-adjust", ownerPrincipal))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("không được âm");
     }

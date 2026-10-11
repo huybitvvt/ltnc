@@ -20,6 +20,7 @@ import {
 import { useMobileAuth } from '@/features/auth/AuthContext';
 import { mobileApiClient } from '../auth/mobileClient';
 import { Tariff, ConsumptionAlert } from './types';
+import { formatMoney } from '../../shared/money';
 
 interface MeteringScreenProps {
   onBack?: () => void;
@@ -251,7 +252,7 @@ export const MeteringScreen: React.FC<MeteringScreenProps> = ({ onBack }) => {
                   </Chip>
                 </View>
                 <Text variant="bodySmall" style={{ color: theme.colors.outline, marginTop: 4 }}>
-                  Sức chứa: {room.maxTenants} người | Giá thuê: {Number(room.basePrice).toLocaleString('vi-VN')} đ
+                  Sức chứa: {room.maxTenants} người | Giá thuê: {formatMoney(room.basePrice)}
                 </Text>
               </Card.Content>
 
@@ -351,7 +352,7 @@ export const MeteringScreen: React.FC<MeteringScreenProps> = ({ onBack }) => {
                     {t.serviceName}
                   </Text>
                   <Text variant="titleMedium" style={{ color: '#2563eb', fontWeight: 'bold' }}>
-                    {Number(t.unitPrice).toLocaleString('vi-VN')} đ / {t.serviceUnit}
+                    {formatMoney(t.unitPrice)} / {t.serviceUnit}
                   </Text>
                 </View>
                 <Text variant="bodySmall" style={{ color: theme.colors.outline, marginTop: 4 }}>

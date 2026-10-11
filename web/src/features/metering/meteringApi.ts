@@ -41,7 +41,7 @@ export const meteringApi = {
 
   createTariff: async (
     buildingId: string,
-    payload: { serviceId: string; effectiveMonth: string; unitPrice: number }
+    payload: { serviceId: string; effectiveMonth: string; unitPrice: string }
   ): Promise<Tariff> => {
     const res = await apiClient.post<{ data: Tariff }>(`/buildings/${buildingId}/tariffs`, payload);
     return res.data.data;
@@ -122,7 +122,7 @@ export const meteringApi = {
 
   createOneOffCharge: async (
     contractId: string,
-    payload: { billingMonth: string; label: string; amount: number; reason: string; sourceRef?: string }
+    payload: { billingMonth: string; label: string; amount: string; reason: string; sourceRef?: string }
   ): Promise<OneOffCharge> => {
     const res = await apiClient.post<{ data: OneOffCharge }>(`/contracts/${contractId}/one-off-charges`, payload);
     return res.data.data;

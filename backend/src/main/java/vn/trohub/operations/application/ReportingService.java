@@ -67,6 +67,21 @@ public class ReportingService {
             throw new AccessDeniedException("Khách thuê không có quyền xem bảng số liệu quản trị");
         }
 
+        if (user.getRole() == UserRole.STAFF && buildingId == null) {
+            List<DashboardMetricsDto> scoped = staffAssignmentRepository.findBuildingIdsByUserId(user.getId()).stream()
+                    .map(id -> getDashboardMetrics(id, billingMonth, principal)).toList();
+            return new DashboardMetricsDto(null, billingMonth,
+                    sumMoney(scoped, DashboardMetricsDto::billedAmount), sumMoney(scoped, DashboardMetricsDto::cashCollected),
+                    sumMoney(scoped, DashboardMetricsDto::cashRefunded), sumMoney(scoped, DashboardMetricsDto::netCash),
+                    sumMoney(scoped, DashboardMetricsDto::totalDebt), sumMoney(scoped, DashboardMetricsDto::totalCredit),
+                    sumMoney(scoped, DashboardMetricsDto::totalDepositHeld),
+                    scoped.stream().mapToInt(DashboardMetricsDto::totalRooms).sum(),
+                    scoped.stream().mapToInt(DashboardMetricsDto::occupiedRooms).sum(),
+                    scoped.stream().mapToInt(DashboardMetricsDto::vacantBookableRooms).sum(),
+                    scoped.stream().mapToInt(DashboardMetricsDto::vacantBlockedRooms).sum(),
+                    scoped.stream().mapToInt(DashboardMetricsDto::openIssuesCount).sum());
+        }
+
         if (user.getRole() == UserRole.STAFF && buildingId != null) {
             boolean assigned = staffAssignmentRepository.existsByUserIdAndBuildingId(user.getId(), buildingId);
             if (!assigned) {
@@ -188,5 +203,10 @@ public class ReportingService {
                 vacantBlockedRooms,
                 openIssuesCount
         );
+    }
+
+    private String sumMoney(List<DashboardMetricsDto> values, java.util.function.Function<DashboardMetricsDto, String> field) {
+        return values.stream().map(value -> new BigDecimal(field.apply(value)))
+                .reduce(BigDecimal.ZERO, BigDecimal::add).toPlainString();
     }
 }

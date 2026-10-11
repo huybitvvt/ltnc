@@ -1,17 +1,13 @@
-# Multi-stage build for TroHub Backend
-FROM eclipse-temurin:17-jdk-alpine AS builder
-WORKDIR /app
-COPY .mvn/ .mvn/
-COPY mvnw pom.xml ./
-RUN chmod +x mvnw && ./mvnw dependency:go-offline -B
-COPY src/ src/
-RUN ./mvnw clean package -DskipTests -B
+FROM maven:3.9.9-eclipse-temurin-17 AS build
+WORKDIR /source
+COPY pom.xml ./
+COPY src ./src
+RUN mvn -B -ntp -DskipTests package
 
-FROM eclipse-temurin:17-jre-alpine AS runner
+FROM eclipse-temurin:17-jre-jammy
+RUN groupadd --gid 10001 trohub && useradd --uid 10001 --gid trohub --no-create-home trohub && mkdir -p /app/uploads && chown -R trohub:trohub /app
 WORKDIR /app
-RUN addgroup -S trohub && adduser -S trohub -G trohub
+COPY --from=build --chown=trohub:trohub /source/target/trohub-backend-1.0.0-SNAPSHOT.jar app.jar
 USER trohub
-COPY --from=builder /app/target/*.jar app.jar
 EXPOSE 8080
-ENV SPRING_PROFILES_ACTIVE=local
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["java", "-XX:MaxRAMPercentage=65", "-jar", "/app/app.jar"]

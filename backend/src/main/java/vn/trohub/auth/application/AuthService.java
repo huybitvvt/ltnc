@@ -47,8 +47,10 @@ public class AuthService {
     @Value("${trohub.owner-bootstrap.login:owner}")
     private String bootstrapOwnerLogin;
 
-    @Value("${trohub.owner-bootstrap.password:TroHubOwner@2026}")
+    @Value("${trohub.owner-bootstrap.password:}")
     private String bootstrapOwnerPassword;
+    @Value("${trohub.owner-bootstrap.enabled:false}")
+    private boolean bootstrapEnabled;
 
     public AuthService(
             UserRepository userRepository,
@@ -71,6 +73,9 @@ public class AuthService {
     @EventListener(ApplicationReadyEvent.class)
     @Transactional
     public void bootstrapOwnerIfNecessary() {
+        if (!bootstrapEnabled) return;
+        if (bootstrapOwnerPassword == null || bootstrapOwnerPassword.length() < 12)
+            throw new IllegalStateException("OWNER_BOOTSTRAP_PASSWORD phải có ít nhất 12 ký tự");
         if (userRepository.countByRole(UserRole.OWNER) == 0) {
             log.info("Khởi tạo tài khoản OWNER mặc định từ cấu hình hệ thống: {}", bootstrapOwnerLogin);
             User owner = new User(
@@ -114,7 +119,7 @@ public class AuthService {
         return new AuthResult(accessToken, rawRefreshToken, user);
     }
 
-    @Transactional
+    @Transactional(noRollbackFor = BadCredentialsException.class)
     public AuthResult refreshSession(String rawRefreshToken) {
         if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
             throw new BadCredentialsException("Refresh token không hợp lệ");
@@ -187,7 +192,7 @@ public class AuthService {
     }
 
     @Transactional
-    public AuthResult activateAccount(String inviteCode, String newPassword) {
+    public User activateAccount(String inviteCode, String newPassword) {
         Instant now = clock.instant();
         String codeHash = JwtTokenProvider.hashToken(inviteCode.trim());
 
@@ -210,19 +215,14 @@ public class AuthService {
         invite.setConsumedAt(now);
         inviteRepository.save(invite);
 
-        // Tạo phiên đăng nhập ngay sau khi kích hoạt thành công
-        UUID familyId = UUID.randomUUID();
-        Instant sessionExpiry = now.plus(refreshTokenExpirationDays, ChronoUnit.DAYS);
-        AuthSession session = authSessionRepository.save(new AuthSession(user, familyId, sessionExpiry));
+        authSessionRepository.revokeAllUserSessions(user.getId(), now);
+        return user;
+    }
 
-        String rawRefreshToken = generateSecureToken();
-        String tokenHash = JwtTokenProvider.hashToken(rawRefreshToken);
-        RefreshToken refreshToken = new RefreshToken(session, tokenHash, sessionExpiry);
-        refreshTokenRepository.save(refreshToken);
-
-        String accessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getLogin(), user.getRole(), session.getId());
-
-        return new AuthResult(accessToken, rawRefreshToken, user);
+    @Transactional
+    public void invalidateInvites(UUID userId) {
+        for (InvitePurpose purpose : InvitePurpose.values())
+            inviteRepository.consumeUnused(userId, purpose, clock.instant());
     }
 
     @Transactional
@@ -242,11 +242,25 @@ public class AuthService {
     }
 
     @Transactional
+    public void resetPassword(String code, String password) {
+        Instant now = clock.instant();
+        Invite invite = inviteRepository.findByCodeHashAndPurpose(JwtTokenProvider.hashToken(code.trim()), InvitePurpose.PASSWORD_RESET)
+                .orElseThrow(() -> new IllegalArgumentException("Mã đặt lại mật khẩu không hợp lệ"));
+        if (invite.isConsumed() || invite.isExpired(now) || !invite.getUser().isEnabled())
+            throw new IllegalArgumentException("Mã đã dùng, hết hạn hoặc tài khoản bị khóa");
+        invite.getUser().setPasswordHash(passwordEncoder.encode(password));
+        userRepository.save(invite.getUser());
+        invite.setConsumedAt(now); inviteRepository.save(invite);
+        authSessionRepository.revokeAllUserSessions(invite.getUser().getId(), now);
+    }
+
+    @Transactional
     public String createInvite(User manager, User targetUser, InvitePurpose purpose) {
         Instant now = clock.instant();
+        inviteRepository.consumeUnused(targetUser.getId(), purpose, now);
         Instant expiresAt = now.plus(24, ChronoUnit.HOURS); // Hạn 24 giờ (BR-016)
 
-        String rawCode = "INV-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+        String rawCode = "INV-" + UUID.randomUUID().toString().replace("-", "").toUpperCase();
         String codeHash = JwtTokenProvider.hashToken(rawCode);
 
         Invite invite = new Invite(targetUser, codeHash, purpose, expiresAt, manager);

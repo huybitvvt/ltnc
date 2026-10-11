@@ -16,6 +16,9 @@ import java.util.UUID;
 
 @Repository
 public interface ContractRepository extends JpaRepository<Contract, UUID> {
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT c FROM Contract c WHERE c.id = :id")
+    Optional<Contract> findForUpdate(@Param("id") UUID id);
 
     Optional<Contract> findByRoomIdAndStatus(UUID roomId, ContractStatus status);
 

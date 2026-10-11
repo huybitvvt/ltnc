@@ -4,6 +4,8 @@ import { Text, Surface, Button, Chip, Dialog, TextInput, HelperText, Portal, Ico
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { mobileApiClient } from '../auth/mobileClient';
 import { ApiResponse } from '../auth/types';
+import { formatMoney, isMoney } from '../../shared/money';
+import { useMobileAuth } from '../auth/AuthContext';
 
 export type RoomStatus = 'VACANT' | 'RENTED' | 'DEPOSIT_RESERVED' | 'MAINTENANCE';
 
@@ -13,6 +15,7 @@ export interface BuildingItem {
   address: string;
   totalRooms: number;
   vacantRooms: number;
+  active: boolean;
 }
 
 export interface RoomItem {
@@ -20,6 +23,7 @@ export interface RoomItem {
   buildingId: string;
   roomNumber: string;
   floorName?: string;
+  floorId?: string;
   basePrice: string | number;
   depositAmount: string | number;
   area?: number;
@@ -34,6 +38,7 @@ interface PropertyScreenProps {
 
 export const PropertyScreen: React.FC<PropertyScreenProps> = ({ onBack }) => {
   const theme = useTheme();
+  const { user } = useMobileAuth();
   const queryClient = useQueryClient();
 
   const [selectedBuildingId, setSelectedBuildingId] = useState<string | null>(null);
@@ -45,6 +50,31 @@ export const PropertyScreen: React.FC<PropertyScreenProps> = ({ onBack }) => {
   const [basePrice, setBasePrice] = useState('3000000');
   const [depositAmount, setDepositAmount] = useState('3000000');
   const [dialogError, setDialogError] = useState<string | null>(null);
+  const [editingRoom, setEditingRoom] = useState<RoomItem | null>(null);
+  const [floorId, setFloorId] = useState('');
+  const [area, setArea] = useState('20');
+  const [capacity, setCapacity] = useState('2');
+  const [buildingOpen, setBuildingOpen] = useState(false);
+  const [editingBuilding, setEditingBuilding] = useState<BuildingItem | null>(null);
+  const [buildingName, setBuildingName] = useState('');
+  const [buildingAddress, setBuildingAddress] = useState('');
+  const [floorOpen, setFloorOpen] = useState(false);
+  const [floorName, setFloorName] = useState('');
+  const [floorOrder, setFloorOrder] = useState('1');
+  const [commandBusy, setCommandBusy] = useState(false);
+  const [commandError, setCommandError] = useState('');
+  async function command(action: () => Promise<void>) {
+    setCommandBusy(true); setCommandError('');
+    try { await action(); await queryClient.invalidateQueries({queryKey:['mobileBuildings']}); }
+    catch (e: any) { setCommandError(e.response?.data?.error?.message ?? 'Không thực hiện được yêu cầu'); }
+    finally { setCommandBusy(false); }
+  }
+  function openRoom(room: RoomItem | null) {
+    setEditingRoom(room); setRoomNumber(room?.roomNumber ?? '');
+    setBasePrice(String(room?.basePrice ?? '3000000')); setDepositAmount(String(room?.depositAmount ?? '3000000'));
+    setFloorId(room?.floorId ?? ''); setArea(String(room?.area ?? '20')); setCapacity(String(room?.maxTenants ?? 2));
+    setDialogError(null); setCreateRoomOpen(true);
+  }
 
   // 1. Fetch buildings
   const { data: buildings = [], isLoading: loadingBuildings, refetch: refetchBuildings } = useQuery({
@@ -60,6 +90,9 @@ export const PropertyScreen: React.FC<PropertyScreenProps> = ({ onBack }) => {
   });
 
   const activeBuildingId = selectedBuildingId || (buildings.length > 0 ? buildings[0].id : null);
+  const currentBuilding = buildings.find(b => b.id === activeBuildingId);
+  const floors = useQuery({queryKey:['mobileFloors', activeBuildingId],enabled:!!activeBuildingId,
+    queryFn:async()=> (await mobileApiClient.get<ApiResponse<Array<{id:string;name:string}>>>(`/buildings/${activeBuildingId}/floors`)).data.data});
 
   // 2. Fetch rooms
   const { data: rooms = [], isLoading: loadingRooms, refetch: refetchRooms, isFetching } = useQuery({
@@ -79,15 +112,20 @@ export const PropertyScreen: React.FC<PropertyScreenProps> = ({ onBack }) => {
   // Mutation: Tạo phòng mới
   const createRoomMutation = useMutation({
     mutationFn: async () => {
-      if (!activeBuildingId) return;
-      await mobileApiClient.post(`/buildings/${activeBuildingId}/rooms`, {
+      if (!activeBuildingId) throw new Error('Chọn tòa nhà trước khi thêm phòng');
+      if (!isMoney(basePrice) || !isMoney(depositAmount)) throw new Error('Giá thuê và cọc phải là số nguyên VNĐ, tối đa 19 chữ số');
+      if (!/^\d+$/.test(capacity) || Number(capacity) < 1) throw new Error('Sức chứa phải là số nguyên dương');
+      const payload = {
         roomNumber: roomNumber.trim(),
         basePrice,
         depositAmount,
-        area: 20,
-        maxTenants: 2,
-        bookable: true,
-      });
+        floorId: floorId || null,
+        area: Number(area),
+        maxTenants: Number(capacity),
+        bookable: editingRoom?.bookable ?? true,
+      };
+      if (editingRoom) await mobileApiClient.put(`/rooms/${editingRoom.id}`, payload);
+      else await mobileApiClient.post(`/buildings/${activeBuildingId}/rooms`, payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['mobileRooms', activeBuildingId] });
@@ -109,10 +147,11 @@ export const PropertyScreen: React.FC<PropertyScreenProps> = ({ onBack }) => {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['mobileRooms', activeBuildingId] });
     },
+    onError: (e: any) => setCommandError(e.response?.data?.error?.message ?? 'Không thể đổi trạng thái cho thuê'),
   });
 
   const formatVND = (val: string | number) => {
-    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(Number(val));
+    return formatMoney(val);
   };
 
   const statusConfig: Record<RoomStatus, { label: string; color: string }> = {
@@ -130,7 +169,7 @@ export const PropertyScreen: React.FC<PropertyScreenProps> = ({ onBack }) => {
         <Text variant="titleMedium" style={styles.headerTitle}>
           Khu nhà & Phòng trọ
         </Text>
-        <Button mode="contained" compact icon="plus" onPress={() => setCreateRoomOpen(true)}>
+        <Button mode="contained" compact icon="plus" disabled={!activeBuildingId} onPress={() => openRoom(null)}>
           Thêm phòng
         </Button>
       </View>
@@ -142,6 +181,15 @@ export const PropertyScreen: React.FC<PropertyScreenProps> = ({ onBack }) => {
           refetchRooms();
         }} />}
       >
+        {!!commandError && <HelperText type="error">{commandError}</HelperText>}
+        {user?.role === 'OWNER' && <View style={{gap:8, marginBottom:12}}>
+          <Button disabled={commandBusy} onPress={() => {setEditingBuilding(null);setBuildingName('');setBuildingAddress('');setBuildingOpen(true);}}>Thêm tòa nhà</Button>
+          {!!currentBuilding && <>
+            <Button disabled={commandBusy} onPress={() => {setEditingBuilding(currentBuilding);setBuildingName(currentBuilding.name);setBuildingAddress(currentBuilding.address);setBuildingOpen(true);}}>Sửa tòa nhà</Button>
+            <Button disabled={commandBusy} onPress={() => command(async()=>{await mobileApiClient.patch(`/buildings/${currentBuilding.id}/active`, null, {params:{active:!currentBuilding.active}});})}>{currentBuilding.active?'Lưu trữ tòa nhà':'Mở lại tòa nhà'}</Button>
+            <Button disabled={commandBusy} onPress={() => {setFloorName('');setFloorOrder('1');setFloorOpen(true);}}>Thêm tầng</Button>
+          </>}
+        </View>}
         {/* Buildings Selector */}
         {buildings.length > 0 && (
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.buildingTabs}>
@@ -228,7 +276,9 @@ export const PropertyScreen: React.FC<PropertyScreenProps> = ({ onBack }) => {
                     size={20}
                     iconColor={room.bookable ? '#f59e0b' : '#10b981'}
                     onPress={() => toggleBookableMutation.mutate({ roomId: room.id, bookable: !room.bookable })}
+                    disabled={toggleBookableMutation.isPending}
                   />
+                  <Button onPress={() => openRoom(room)}>Sửa phòng</Button>
                 </View>
               </Surface>
             );
@@ -238,9 +288,35 @@ export const PropertyScreen: React.FC<PropertyScreenProps> = ({ onBack }) => {
 
       {/* Dialog Thêm Phòng */}
       <Portal>
-        <Dialog visible={createRoomOpen} onDismiss={() => setCreateRoomOpen(false)}>
-          <Dialog.Title>Thêm phòng mới</Dialog.Title>
+        <Dialog visible={buildingOpen} onDismiss={() => !commandBusy && setBuildingOpen(false)}>
+          <Dialog.Title>{editingBuilding?'Sửa tòa nhà':'Thêm tòa nhà'}</Dialog.Title>
           <Dialog.Content>
+            {!!commandError && <HelperText type="error">{commandError}</HelperText>}
+            <TextInput label="Tên tòa nhà" value={buildingName} onChangeText={setBuildingName} />
+            <TextInput label="Địa chỉ" value={buildingAddress} onChangeText={setBuildingAddress} />
+          </Dialog.Content>
+          <Dialog.Actions><Button disabled={commandBusy} onPress={()=>setBuildingOpen(false)}>Hủy</Button>
+            <Button loading={commandBusy} disabled={commandBusy || !buildingName.trim() || !buildingAddress.trim()} onPress={()=>command(async()=>{
+              const payload={name:buildingName.trim(),address:buildingAddress.trim()};
+              if(editingBuilding) await mobileApiClient.put(`/buildings/${editingBuilding.id}`,payload);
+              else {const res=await mobileApiClient.post('/buildings',payload);setSelectedBuildingId(res.data.data.id);}
+              setBuildingOpen(false);
+            })}>Lưu</Button></Dialog.Actions>
+        </Dialog>
+        <Dialog visible={floorOpen} onDismiss={()=>!commandBusy && setFloorOpen(false)}>
+          <Dialog.Title>Thêm tầng</Dialog.Title><Dialog.Content>
+            {!!commandError && <HelperText type="error">{commandError}</HelperText>}
+            <TextInput label="Tên tầng" value={floorName} onChangeText={setFloorName} />
+            <TextInput label="Thứ tự tầng" value={floorOrder} onChangeText={setFloorOrder} keyboardType="numeric" />
+          </Dialog.Content><Dialog.Actions><Button disabled={commandBusy} onPress={()=>setFloorOpen(false)}>Hủy</Button>
+            <Button disabled={commandBusy || !floorName.trim() || !/^-?\d+$/.test(floorOrder)} onPress={()=>command(async()=>{
+              await mobileApiClient.post(`/buildings/${activeBuildingId}/floors`,{name:floorName.trim(),floorOrder:Number(floorOrder)});
+              await floors.refetch();setFloorOpen(false);
+            })}>Lưu</Button></Dialog.Actions>
+        </Dialog>
+        <Dialog visible={createRoomOpen} onDismiss={() => setCreateRoomOpen(false)}>
+          <Dialog.Title>{editingRoom?'Sửa phòng':'Thêm phòng mới'}</Dialog.Title>
+          <Dialog.ScrollArea><ScrollView keyboardShouldPersistTaps="handled" style={{maxHeight:400,padding:16}}>
             {dialogError && (
               <HelperText type="error" visible={!!dialogError}>
                 {dialogError}
@@ -270,7 +346,11 @@ export const PropertyScreen: React.FC<PropertyScreenProps> = ({ onBack }) => {
               mode="outlined"
               style={styles.dialogInput}
             />
-          </Dialog.Content>
+            <TextInput label="Diện tích (m²)" value={area} onChangeText={setArea} keyboardType="decimal-pad" style={styles.dialogInput} />
+            <TextInput label="Sức chứa" value={capacity} onChangeText={setCapacity} keyboardType="numeric" style={styles.dialogInput} />
+            <Text>Chọn tầng</Text><Button onPress={()=>setFloorId('')} mode={!floorId?'contained':'text'}>Chưa gán tầng</Button>
+            {floors.data?.map(floor=><Button key={floor.id} mode={floorId===floor.id?'contained':'text'} onPress={()=>setFloorId(floor.id)}>{floor.name}</Button>)}
+          </ScrollView></Dialog.ScrollArea>
           <Dialog.Actions>
             <Button onPress={() => setCreateRoomOpen(false)}>Hủy</Button>
             <Button
@@ -278,7 +358,7 @@ export const PropertyScreen: React.FC<PropertyScreenProps> = ({ onBack }) => {
               loading={createRoomMutation.isPending}
               disabled={createRoomMutation.isPending}
             >
-              Tạo phòng
+              Lưu phòng
             </Button>
           </Dialog.Actions>
         </Dialog>

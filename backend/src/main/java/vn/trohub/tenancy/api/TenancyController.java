@@ -32,23 +32,28 @@ public class TenancyController {
     // ==========================================
 
     @GetMapping("/tenants")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
     public ResponseEntity<ApiResponse<List<TenantSummary>>> listTenants(
             @RequestParam(required = false) String query,
-            @PageableDefault(size = 20) Pageable pageable) {
-        Page<TenantSummary> page = tenancyService.searchTenants(query, pageable);
+            @PageableDefault(size = 20) Pageable pageable,
+            @AuthenticationPrincipal UserPrincipal actor) {
+        Page<TenantSummary> page = tenancyService.searchTenants(query, pageable, actor);
         return ResponseEntity.ok(ApiResponse.ofPage(page));
     }
 
     @PostMapping("/tenants")
+    @org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
     public ResponseEntity<ApiResponse<TenantSummary>> createTenant(
-            @Valid @RequestBody CreateTenantRequest request) {
-        TenantSummary summary = tenancyService.createTenantProfile(request);
+            @Valid @RequestBody CreateTenantRequest request,
+            @AuthenticationPrincipal UserPrincipal actor) {
+        TenantSummary summary = tenancyService.createTenantProfile(request, actor);
         return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.of(summary));
     }
 
     @GetMapping("/tenants/{id}")
-    public ResponseEntity<ApiResponse<TenantSummary>> getTenant(@PathVariable UUID id) {
-        TenantSummary summary = tenancyService.getTenantProfile(id);
+    @org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('OWNER', 'STAFF')")
+    public ResponseEntity<ApiResponse<TenantSummary>> getTenant(@PathVariable UUID id, @AuthenticationPrincipal UserPrincipal actor) {
+        TenantSummary summary = tenancyService.getTenantProfile(id, actor);
         return ResponseEntity.ok(ApiResponse.of(summary));
     }
 

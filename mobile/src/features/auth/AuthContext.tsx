@@ -6,6 +6,7 @@ import {
   storageHelper,
 } from './mobileClient';
 import { ApiResponse, AuthUser, LoginResponseData } from './types';
+import { useQueryClient } from '@tanstack/react-query';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -20,14 +21,16 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<PropsWithChildren> = ({ children }) => {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
 
   const clearSession = useCallback(async () => {
+    queryClient.clear();
     setMobileAccessToken(null);
     setUser(null);
     await storageHelper.clearRefreshToken();
-  }, []);
+  }, [queryClient]);
 
   useEffect(() => {
     setOnMobileAuthExpired(() => {
@@ -46,7 +49,7 @@ export const AuthProvider: React.FC<PropsWithChildren> = ({ children }) => {
           return;
         }
 
-        const response = await mobileApiClient.post<ApiResponse<LoginResponseData>>('/auth/refresh', {
+        const response = await mobileApiClient.post<ApiResponse<LoginResponseData>>('/auth/mobile/refresh', {
           refreshToken: storedRefreshToken,
         });
 
@@ -78,16 +81,22 @@ export const AuthProvider: React.FC<PropsWithChildren> = ({ children }) => {
   const login = async (loginId: string, password: string): Promise<AuthUser> => {
     setIsLoading(true);
     try {
-      const response = await mobileApiClient.post<ApiResponse<LoginResponseData>>('/auth/login', {
+      const response = await mobileApiClient.post<any>('/auth/mobile/login', {
         login: loginId.trim(),
         password,
       });
 
-      if (!response.data.success) {
-        throw new Error(response.data.message || 'Đăng nhập không thành công');
+      const resPayload = response.data;
+      if (!resPayload || resPayload.success === false) {
+        throw new Error(resPayload?.message || resPayload?.error?.message || 'Đăng nhập không thành công');
       }
 
-      const { accessToken, refreshToken, user: loggedInUser } = response.data.data;
+      const loginData = resPayload.data;
+      if (!loginData || !loginData.accessToken) {
+        throw new Error('Dữ liệu xác thực không hợp lệ');
+      }
+
+      const { accessToken, refreshToken, user: loggedInUser } = loginData;
       setMobileAccessToken(accessToken);
       setUser(loggedInUser);
 
@@ -103,7 +112,8 @@ export const AuthProvider: React.FC<PropsWithChildren> = ({ children }) => {
 
   const logout = async (): Promise<void> => {
     try {
-      await mobileApiClient.post('/auth/logout');
+      const refreshToken = await storageHelper.getRefreshToken();
+      if (refreshToken) await mobileApiClient.post('/auth/mobile/logout', { refreshToken });
     } catch {
       // bỏ qua lỗi mạng
     } finally {

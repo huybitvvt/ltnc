@@ -73,12 +73,18 @@ public class PropertyDtos {
             String roomNumber,
             @NotNull(message = "Giá thuê cơ bản không được để trống")
             @DecimalMin(value = "0", message = "Giá thuê cơ bản phải lớn hơn hoặc bằng 0")
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal basePrice,
             @NotNull(message = "Tiền cọc định mức không được để trống")
             @DecimalMin(value = "0", message = "Tiền cọc định mức phải lớn hơn hoặc bằng 0")
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal depositAmount,
-            BigDecimal area,
-            Integer maxTenants,
+            @DecimalMin("0") BigDecimal area,
+            @jakarta.validation.constraints.Min(1) Integer maxTenants,
             Boolean bookable
     ) {}
 
@@ -89,7 +95,13 @@ public class PropertyDtos {
             UUID floorId,
             String floorName,
             String roomNumber,
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal basePrice,
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal depositAmount,
             BigDecimal area,
             int maxTenants,

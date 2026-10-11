@@ -23,20 +23,19 @@ import {
   Tooltip,
   Snackbar,
 } from '@mui/material';
-import {
-  Add as AddIcon,
-  Refresh as RefreshIcon,
-  MeetingRoom as RoomIcon,
-  Lock as LockIcon,
-  LockOpen as LockOpenIcon,
-  Apartment as ApartmentIcon,
-  Layers as FloorIcon,
-} from '@mui/icons-material';
+import AddIcon from '@mui/icons-material/Add';
+import RefreshIcon from '@mui/icons-material/Refresh';
+import RoomIcon from '@mui/icons-material/MeetingRoom';
+import LockIcon from '@mui/icons-material/Lock';
+import LockOpenIcon from '@mui/icons-material/LockOpen';
+import ApartmentIcon from '@mui/icons-material/Apartment';
+import FloorIcon from '@mui/icons-material/Layers';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiClient } from '../../shared/api/client';
 import { ApiResponse } from '../auth/types';
 import { BuildingItem, FloorItem, RoomItem, RoomStatus } from './types';
 import { useAuth } from '../auth/AuthContext';
+import { formatMoney, isMoney } from '../../shared/money';
 
 export const BuildingsPage: React.FC = () => {
   const { user } = useAuth();
@@ -50,6 +49,7 @@ export const BuildingsPage: React.FC = () => {
   const [buildingName, setBuildingName] = useState('');
   const [buildingAddress, setBuildingAddress] = useState('');
   const [buildingError, setBuildingError] = useState<string | null>(null);
+  const [editingBuilding, setEditingBuilding] = useState<BuildingItem | null>(null);
 
   // Dialog Tầng
   const [createFloorOpen, setCreateFloorOpen] = useState(false);
@@ -65,6 +65,13 @@ export const BuildingsPage: React.FC = () => {
   const [roomArea, setRoomArea] = useState('20');
   const [roomMaxTenants, setRoomMaxTenants] = useState('2');
   const [roomError, setRoomError] = useState<string | null>(null);
+  const [editingRoom, setEditingRoom] = useState<RoomItem | null>(null);
+  const openRoom = (room: RoomItem | null) => {
+    setEditingRoom(room); setRoomNumber(room?.roomNumber ?? ''); setRoomFloorId(room?.floorId ?? '');
+    setRoomPrice(String(room?.basePrice ?? '3000000')); setRoomDeposit(String(room?.depositAmount ?? '3000000'));
+    setRoomArea(String(room?.area ?? '20')); setRoomMaxTenants(String(room?.maxTenants ?? '2'));
+    setRoomError(null); setCreateRoomOpen(true);
+  };
 
   const [snackbarMsg, setSnackbarMsg] = useState<string | null>(null);
 
@@ -112,10 +119,12 @@ export const BuildingsPage: React.FC = () => {
   // Mutation: Tạo tòa nhà mới
   const createBuildingMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiClient.post<ApiResponse<BuildingItem>>('/buildings', {
+      const payload = {
         name: buildingName.trim(),
         address: buildingAddress.trim(),
-      });
+      };
+      const res = editingBuilding ? await apiClient.put<ApiResponse<BuildingItem>>(`/buildings/${editingBuilding.id}`,payload)
+        : await apiClient.post<ApiResponse<BuildingItem>>('/buildings',payload);
       return res.data.data;
     },
     onSuccess: (newB) => {
@@ -124,7 +133,7 @@ export const BuildingsPage: React.FC = () => {
       setBuildingName('');
       setBuildingAddress('');
       setSelectedBuildingId(newB.id);
-      setSnackbarMsg('Thêm tòa nhà mới thành công!');
+      setSnackbarMsg('Đã lưu tòa nhà');
     },
     onError: (err: any) => {
       setBuildingError(err.response?.data?.error?.message || err.message || 'Lỗi tạo tòa nhà');
@@ -154,16 +163,19 @@ export const BuildingsPage: React.FC = () => {
   // Mutation: Tạo phòng mới
   const createRoomMutation = useMutation({
     mutationFn: async () => {
-      if (!activeBuildingId) return;
-      await apiClient.post<ApiResponse<RoomItem>>(`/buildings/${activeBuildingId}/rooms`, {
+      if (!activeBuildingId) throw new Error('Chọn tòa nhà trước khi thêm phòng');
+      if (!isMoney(roomPrice) || !isMoney(roomDeposit)) throw new Error('Giá thuê và cọc phải là số nguyên VNĐ, tối đa 19 chữ số');
+      const payload = {
         floorId: roomFloorId || null,
         roomNumber: roomNumber.trim(),
         basePrice: roomPrice,
         depositAmount: roomDeposit,
         area: parseFloat(roomArea) || 20,
         maxTenants: parseInt(roomMaxTenants, 10) || 2,
-        bookable: true,
-      });
+        bookable: editingRoom?.bookable ?? true,
+      };
+      if (editingRoom) await apiClient.put(`/rooms/${editingRoom.id}`,payload);
+      else await apiClient.post(`/buildings/${activeBuildingId}/rooms`,payload);
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['rooms', activeBuildingId] });
@@ -171,7 +183,7 @@ export const BuildingsPage: React.FC = () => {
       setCreateRoomOpen(false);
       setRoomNumber('');
       setRoomError(null);
-      setSnackbarMsg('Thêm phòng mới thành công!');
+      setSnackbarMsg('Đã lưu phòng');
     },
     onError: (err: any) => {
       setRoomError(err.response?.data?.error?.message || err.message || 'Lỗi tạo phòng');
@@ -193,7 +205,7 @@ export const BuildingsPage: React.FC = () => {
   });
 
   const formatVND = (amount: string | number) => {
-    return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(Number(amount));
+    return formatMoney(amount);
   };
 
   const statusConfig: Record<RoomStatus, { label: string; color: 'success' | 'primary' | 'warning' | 'default' }> = {
@@ -225,6 +237,7 @@ export const BuildingsPage: React.FC = () => {
               startIcon={<ApartmentIcon />}
               onClick={() => {
                 setBuildingError(null);
+                setEditingBuilding(null); setBuildingName(''); setBuildingAddress('');
                 setCreateBuildingOpen(true);
               }}
             >
@@ -289,16 +302,19 @@ export const BuildingsPage: React.FC = () => {
             ))}
           </Box>
           <Box sx={{ display: 'flex', gap: 1 }}>
+            {user?.role === 'OWNER' && <>
+            <Button onClick={() => {const b=buildings.find(item=>item.id===activeBuildingId);if(!b)return;setEditingBuilding(b);setBuildingName(b.name);setBuildingAddress(b.address);setBuildingError(null);setCreateBuildingOpen(true);}}>Sửa tòa nhà</Button>
+            <Button onClick={async()=>{const b=buildings.find(item=>item.id===activeBuildingId);if(!b)return;try{await apiClient.patch(`/buildings/${b.id}/active`,null,{params:{active:!b.active}});await refetchBuildings();}catch(e:any){setSnackbarMsg(e.response?.data?.error?.message??'Không thể cập nhật tòa nhà');}}}>{buildings.find(b=>b.id===activeBuildingId)?.active?'Lưu trữ tòa nhà':'Mở lại tòa nhà'}</Button>
             <Button variant="outlined" size="small" startIcon={<FloorIcon />} onClick={() => setCreateFloorOpen(true)}>
               Thêm tầng
             </Button>
+            </>}
             <Button
               variant="contained"
               size="small"
               startIcon={<AddIcon />}
               onClick={() => {
-                setRoomError(null);
-                setCreateRoomOpen(true);
+                openRoom(null);
               }}
             >
               Thêm phòng
@@ -364,6 +380,7 @@ export const BuildingsPage: React.FC = () => {
                   </CardContent>
 
                   <CardActions sx={{ px: 2.5, pb: 2, pt: 0, justifyContent: 'space-between' }}>
+                    <Button size="small" onClick={()=>openRoom(room)}>Sửa phòng</Button>
                     <Chip
                       label={room.bookable ? 'Cho phép thuê' : 'Đang khóa thuê'}
                       size="small"
@@ -395,7 +412,7 @@ export const BuildingsPage: React.FC = () => {
             createBuildingMutation.mutate();
           }}
         >
-          <DialogTitle fontWeight={700}>Thêm tòa nhà mới</DialogTitle>
+          <DialogTitle fontWeight={700}>{editingBuilding?'Sửa tòa nhà':'Thêm tòa nhà mới'}</DialogTitle>
           <DialogContent>
             {buildingError && (
               <Alert severity="error" sx={{ mb: 2 }}>
@@ -424,7 +441,7 @@ export const BuildingsPage: React.FC = () => {
           <DialogActions sx={{ px: 3, pb: 2.5 }}>
             <Button onClick={() => setCreateBuildingOpen(false)}>Hủy</Button>
             <Button type="submit" variant="contained" disabled={createBuildingMutation.isPending}>
-              {createBuildingMutation.isPending ? 'Đang tạo...' : 'Tạo tòa nhà'}
+              {createBuildingMutation.isPending ? 'Đang lưu...' : 'Lưu tòa nhà'}
             </Button>
           </DialogActions>
         </form>
@@ -476,7 +493,7 @@ export const BuildingsPage: React.FC = () => {
             createRoomMutation.mutate();
           }}
         >
-          <DialogTitle fontWeight={700}>Thêm phòng trọ mới</DialogTitle>
+          <DialogTitle fontWeight={700}>{editingRoom?'Sửa phòng':'Thêm phòng trọ mới'}</DialogTitle>
           <DialogContent>
             {roomError && (
               <Alert severity="error" sx={{ mb: 2 }}>
@@ -555,7 +572,7 @@ export const BuildingsPage: React.FC = () => {
           <DialogActions sx={{ px: 3, pb: 2.5 }}>
             <Button onClick={() => setCreateRoomOpen(false)}>Hủy</Button>
             <Button type="submit" variant="contained" disabled={createRoomMutation.isPending}>
-              {createRoomMutation.isPending ? 'Đang tạo...' : 'Tạo phòng'}
+              {createRoomMutation.isPending ? 'Đang lưu...' : 'Lưu phòng'}
             </Button>
           </DialogActions>
         </form>

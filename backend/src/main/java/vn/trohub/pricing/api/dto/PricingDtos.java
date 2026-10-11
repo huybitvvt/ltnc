@@ -35,6 +35,9 @@ public class PricingDtos {
             String serviceUnit,
             ServiceCalculationType calculationType,
             String effectiveMonth,
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal unitPrice
     ) {}
 
@@ -46,6 +49,9 @@ public class PricingDtos {
             String effectiveMonth,
             @NotNull(message = "Đơn giá không được để trống")
             @DecimalMin(value = "0", message = "Đơn giá không được âm")
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal unitPrice
     ) {}
 
@@ -86,6 +92,9 @@ public class PricingDtos {
             UUID contractId,
             String billingMonth,
             String label,
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal amount,
             String reason,
             String sourceRef
@@ -99,6 +108,9 @@ public class PricingDtos {
             String label,
             @NotNull(message = "Số tiền không được để trống")
             @DecimalMin(value = "0", message = "Số tiền không được âm")
+            @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
+            @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
+            @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal amount,
             @NotBlank(message = "Lý do thu không được để trống")
             String reason,

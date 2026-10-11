@@ -73,6 +73,7 @@ class TenancyServiceTest {
     void setUp() {
         testBuilding = new Building("Tòa nhà Cầu Giấy", "Số 12 Dịch Vọng Hậu");
         testRoom = new Room(testBuilding, null, "P101", new BigDecimal("3500000"), new BigDecimal("3500000"));
+        testRoom.setId(UUID.randomUUID());
         testRoom.setMaxTenants(2);
 
         testTenant = new TenantProfile("Nguyễn Văn An", "0912345678", "********1234", "an@example.com");
@@ -296,7 +297,7 @@ class TenancyServiceTest {
                 List.of(finalReading)
         );
 
-        when(contractRepository.findById(contract.getId())).thenReturn(Optional.of(contract));
+        when(contractRepository.findForUpdate(contract.getId())).thenReturn(Optional.of(contract));
         when(userRepository.findById(ownerPrincipal.getId())).thenReturn(Optional.of(managerUser));
         when(roomMeterRepository.findById(elecMeter.getId())).thenReturn(Optional.of(elecMeter));
         when(contractMemberRepository.findByContractIdOrderByJoinedOnAsc(contract.getId())).thenReturn(List.of(member));
@@ -327,7 +328,7 @@ class TenancyServiceTest {
                 List.of()
         );
 
-        when(contractRepository.findById(contract.getId())).thenReturn(Optional.of(contract));
+        when(contractRepository.findForUpdate(contract.getId())).thenReturn(Optional.of(contract));
 
         assertThatThrownBy(() -> tenancyService.checkoutContract(contract.getId(), request, ownerPrincipal))
                 .isInstanceOf(IllegalArgumentException.class)
@@ -346,7 +347,7 @@ class TenancyServiceTest {
                 List.of()
         );
 
-        when(contractRepository.findById(contract.getId())).thenReturn(Optional.of(contract));
+        when(contractRepository.findForUpdate(contract.getId())).thenReturn(Optional.of(contract));
 
         assertThatThrownBy(() -> tenancyService.checkoutContract(contract.getId(), request, ownerPrincipal))
                 .isInstanceOf(IllegalStateException.class)

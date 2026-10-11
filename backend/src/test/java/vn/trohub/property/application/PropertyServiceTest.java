@@ -202,4 +202,25 @@ class PropertyServiceTest {
         assertFalse(res.bookable());
         verify(roomRepository).save(room);
     }
+
+    @Test
+    void floorFromAnotherBuildingIsRejectedOnCreateAndUpdate() {
+        Building building = new Building("A", "A"); building.setId(UUID.randomUUID());
+        Building other = new Building("B", "B"); other.setId(UUID.randomUUID());
+        Floor foreign = new Floor(other, "1", 1); foreign.setId(UUID.randomUUID());
+        Room room = new Room(building, null, "101", BigDecimal.ONE, BigDecimal.ONE); room.setId(UUID.randomUUID());
+        RoomRequest request = new RoomRequest(foreign.getId(), "101", BigDecimal.ONE, BigDecimal.ONE, null, 2, true);
+        when(buildingRepository.findById(building.getId())).thenReturn(Optional.of(building));
+        when(floorRepository.findById(foreign.getId())).thenReturn(Optional.of(foreign));
+        when(roomRepository.findByIdWithDetails(room.getId())).thenReturn(Optional.of(room));
+        assertThrows(IllegalArgumentException.class, () -> propertyService.createRoom(building.getId(), request, ownerPrincipal));
+        assertThrows(IllegalArgumentException.class, () -> propertyService.updateRoom(room.getId(), request, ownerPrincipal));
+        verify(roomRepository, never()).save(any());
+    }
+
+    @Test
+    void staffCannotCreateFloorEvenInAssignedBuilding() {
+        assertThrows(AccessDeniedException.class, () -> propertyService.createFloor(UUID.randomUUID(), new FloorRequest("1", 1), staffPrincipal));
+        verify(floorRepository, never()).save(any());
+    }
 }

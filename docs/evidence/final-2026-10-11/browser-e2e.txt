@@ -1,0 +1,14 @@
+> trohub-web@1.0.0 test:e2e
+> playwright test
+
+
+Running 4 tests using 1 worker
+
+(node:18964) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ok 1 e2e\roles.spec.ts:56:1 › OWNER can read the staff page and restore the session on reload (7.7s)
+  ok 2 e2e\roles.spec.ts:64:1 › STAFF sees assigned buildings and API rejects another building (10.2s)
+  ok 3 e2e\roles.spec.ts:73:1 › TENANT sees own issued invoice and cannot open owner user management (5.1s)
+  ok 4 e2e\roles.spec.ts:86:1 › a lost payment response can be retried from the form without another receipt (7.2s)
+
+  4 passed (38.0s)

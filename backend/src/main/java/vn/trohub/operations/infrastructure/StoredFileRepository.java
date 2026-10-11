@@ -10,4 +10,5 @@ import java.util.UUID;
 public interface StoredFileRepository extends JpaRepository<StoredFile, UUID> {
     List<StoredFile> findByParentTypeAndParentId(ParentType parentType, UUID parentId);
     List<StoredFile> findByParentId(UUID parentId);
+    List<StoredFile> findByStatusAndCreatedAtBefore(String status, java.time.Instant before);
 }

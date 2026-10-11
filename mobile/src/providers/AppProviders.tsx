@@ -1,5 +1,6 @@
-import React, { PropsWithChildren } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import React, { PropsWithChildren, useEffect } from 'react';
+import { AppState } from 'react-native';
+import { QueryClient, QueryClientProvider, focusManager } from '@tanstack/react-query';
 import { PaperProvider, MD3LightTheme } from 'react-native-paper';
 import { AuthProvider } from '../features/auth/AuthContext';
 
@@ -21,6 +22,10 @@ const theme = {
 };
 
 export const AppProviders: React.FC<PropsWithChildren> = ({ children }) => {
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', state => focusManager.setFocused(state === 'active'));
+    return () => subscription.remove();
+  }, []);
   return (
     <QueryClientProvider client={queryClient}>
       <PaperProvider theme={theme}>

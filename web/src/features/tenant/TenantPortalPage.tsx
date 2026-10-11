@@ -18,15 +18,14 @@ import {
   TableRow,
   Typography,
 } from '@mui/material';
-import {
-  MeetingRoom as RoomIcon,
-  ReceiptLong as ReceiptIcon,
-  ReportProblem as TicketIcon,
-  People as PeopleIcon,
-} from '@mui/icons-material';
+import RoomIcon from '@mui/icons-material/MeetingRoom';
+import ReceiptIcon from '@mui/icons-material/ReceiptLong';
+import TicketIcon from '@mui/icons-material/ReportProblem';
+import PeopleIcon from '@mui/icons-material/People';
 import { useAuth } from '../auth/AuthContext';
 import { contractsApi } from '../contracts/contractsApi';
 import { ContractMemberResponse, ContractSummary } from '../contracts/types';
+import { formatMoney } from '../../shared/money';
 
 export const TenantPortalPage: React.FC = () => {
   const { user } = useAuth();
@@ -55,11 +54,6 @@ export const TenantPortalPage: React.FC = () => {
 
     loadTenantContracts();
   }, []);
-
-  const formatMoney = (val?: string) => {
-    if (!val) return '0 ₫';
-    return Number(val).toLocaleString('vi-VN') + ' ₫';
-  };
 
   const activeContract = contracts.find((c) => c.status === 'ACTIVE') || (contracts.length > 0 ? contracts[0] : null);
 
