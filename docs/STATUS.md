@@ -8,7 +8,7 @@ Checkpoint: **11/10/2026 — IN_PROGRESS**. Repository public: https://github.co
 - Web & Mobile typecheck PASS; **9 web tests, 5 mobile tests**, production web build PASS. Đã lưu idempotency key theo actor qua reload/restart, form hóa đơn cuối sau checkout, OWNER-only sửa tòa, và chặn phương thức thu/hoàn cọc ngoài CASH/BANK_TRANSFER.
 - Browser E2E: **5/5 PASS** (bao gồm gửi lại thu tiền sau reload và luồng checkout retry + phát hành hóa đơn cuối trước đối chiếu cọc).
 - Backup & Restore: `scripts/backup_restore.py` và `docs/BACKUP_RESTORE.md` đã chạy nghiệm thu thực tế thành công qua `.tools/check-backup.py` (kiểm tra dump/restore database, checksum ảnh mã hóa, đối chiếu tổng ledger, từ chối ghi đè database/storage không rỗng, và kiểm thử HTTP sau restore).
-- Cấu hình Vercel & Render: đã bổ sung `web/vercel.json`, `render.yaml`, `application-prod.yml` cấu hình Hikari/TLSv1.2 cho Supabase connection pooler (port 6543) và commit `4581e58` đã đẩy lên GitHub master.
+- Triển khai Cloud hoàn tất & Nghiệm thu Live: Đã deploy thành công cả 3 tầng: Supabase PostgreSQL (pooler 6543 Transaction mode), Render Backend (`https://trohub-backend.onrender.com`), và Vercel Frontend (`https://ltnc-web.vercel.app`). Đã kiểm thử HTTP luồng thật: lấy CSRF token, CORS cho phép domain Vercel, và đăng nhập OWNER trả về HTTP 200 kèm phiên người dùng.
 - Android APK: tiếp tục hoãn (DEFERRED) theo chỉ đạo của chủ dự án; các kiểm tra code và typecheck/jest của mobile vẫn chạy đầy đủ.
 
 Source backend, web và mobile đã có. [IMPLEMENTATION_REVIEW.md](IMPLEMENTATION_REVIEW.md) ghi kết quả trước đợt sửa này; không dùng unit test hoặc typecheck để kết luận đủ capability trên thiết bị.
