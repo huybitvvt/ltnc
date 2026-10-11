@@ -33,12 +33,24 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
+    @org.springframework.beans.factory.annotation.Value("${trohub.auth.secure-cookies:true}")
+    private boolean secureCookies;
+
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, com.fasterxml.jackson.databind.ObjectMapper mapper) throws Exception {
+        var csrfRepo = org.springframework.security.web.csrf.CookieCsrfTokenRepository.withHttpOnlyFalse();
+        csrfRepo.setCookieCustomizer(cookie -> {
+            if (secureCookies) {
+                cookie.sameSite("None").secure(true).path("/");
+            } else {
+                cookie.sameSite("Lax").secure(false).path("/");
+            }
+        });
+
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(csrf -> csrf
-                .csrfTokenRepository(org.springframework.security.web.csrf.CookieCsrfTokenRepository.withHttpOnlyFalse())
+                .csrfTokenRepository(csrfRepo)
                 .csrfTokenRequestHandler(new org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler())
                 .requireCsrfProtectionMatcher(request ->
                     request.getRequestURI().startsWith("/api/v1/auth/web/")

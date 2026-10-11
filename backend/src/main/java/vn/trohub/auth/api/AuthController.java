@@ -184,10 +184,11 @@ public class AuthController {
     }
 
     private void setRefreshCookie(HttpServletResponse response, String token, long maxAgeSeconds) {
+        String sameSite = secureCookies ? "None" : "Lax";
         ResponseCookie cookie = ResponseCookie.from(REFRESH_COOKIE_NAME, token)
                 .httpOnly(true)
                 .secure(secureCookies)
-                .sameSite("Lax")
+                .sameSite(sameSite)
                 .path("/api/v1/auth/web")
                 .maxAge(maxAgeSeconds)
                 .build();
@@ -195,10 +196,11 @@ public class AuthController {
     }
 
     private void deleteRefreshCookie(HttpServletResponse response) {
+        String sameSite = secureCookies ? "None" : "Lax";
         ResponseCookie cookie = ResponseCookie.from(REFRESH_COOKIE_NAME, "")
                 .httpOnly(true)
                 .secure(secureCookies)
-                .sameSite("Lax")
+                .sameSite(sameSite)
                 .path("/api/v1/auth/web")
                 .maxAge(0)
                 .build();

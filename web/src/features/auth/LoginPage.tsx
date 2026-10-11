@@ -49,7 +49,7 @@ export const LoginPage: React.FC = () => {
         navigate('/dashboard', { replace: true });
       }
     } catch (err: any) {
-      const apiMsg = err.response?.data?.error?.message || err.message || 'Đăng nhập không thành công';
+      const apiMsg = err.response?.data?.message || err.response?.data?.error?.message || err.message || 'Đăng nhập không thành công';
       setError(apiMsg);
     } finally {
       setLoading(false);

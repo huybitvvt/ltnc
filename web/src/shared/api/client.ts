@@ -65,6 +65,9 @@ apiClient.interceptors.request.use(async (config: InternalAxiosRequestConfig) =>
 apiClient.interceptors.response.use(
   async (response) => { await releaseCommand(response.config); return response; },
   async (error: AxiosError) => {
+    if (error.response?.status === 403) {
+      csrfPromise = null;
+    }
     if (error.config && error.response && error.response.status >= 400 && error.response.status < 500 && error.response.status !== 401)
       await releaseCommand(error.config);
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
