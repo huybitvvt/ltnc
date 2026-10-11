@@ -1294,6 +1294,11 @@ paths:
         schema:
           type: string
           format: uuid
+      - name: X-Idempotency-Key
+        in: header
+        required: true
+        schema:
+          type: string
       requestBody:
         content:
           application/json:
@@ -3841,6 +3846,8 @@ components:
           type: string
           format: date
         value:
+          minimum: 0
+          exclusiveMinimum: false
           type: number
     ActivateContractRequest:
       required:
@@ -4532,11 +4539,11 @@ components:
     CsrfToken:
       type: object
       properties:
-        headerName:
+        parameterName:
           type: string
         token:
           type: string
-        parameterName:
+        headerName:
           type: string
     ApiResponseListMapStringObject:
       type: object

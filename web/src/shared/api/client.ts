@@ -1,30 +1,23 @@
 import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import { ApiResponse, LoginResponseData } from '../../features/auth/types';
+import { createPendingCommands } from '../pendingCommands';
 
 const baseURL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
 
 let inMemoryToken: string | null = null;
 let onAuthExpiredHandler: (() => void) | null = null;
 let isRefreshing = false;
-let commandCounter = 0;
-const pendingCommands = new Map<string, string>();
+const commands = createPendingCommands({ get: key => localStorage.getItem(key),
+  set: (key, value) => localStorage.setItem(key, value), remove: key => localStorage.removeItem(key) });
+export const setCommandActor = (id: string | null) => commands.setActor(id);
+type CommandConfig = InternalAxiosRequestConfig & { _commandStorageKey?: string };
 const commandPattern = /\/(payments|deposits)\/|\/invoices\/[^/]+\/(issue|adjust)$|\/contracts\/[^/]+\/checkout$/;
-function commandKey(config: InternalAxiosRequestConfig): string | undefined {
-  if (config.method !== 'post' || !commandPattern.test(config.url || '')) return;
-  const fingerprint = (config.url || '') + ':' + (typeof config.data === 'string' ? config.data : JSON.stringify(config.data ?? {}));
-  let key = pendingCommands.get(fingerprint);
-  if (!key) { key = 'cmd-' + Date.now() + '-' + (++commandCounter) + '-' + Math.random().toString(36).slice(2); pendingCommands.set(fingerprint, key); }
-  return key;
-}
-function releaseCommand(config: InternalAxiosRequestConfig) {
-  const fingerprint = (config.url || '') + ':' + (typeof config.data === 'string' ? config.data : JSON.stringify(config.data ?? {}));
-  pendingCommands.delete(fingerprint);
-}
+const releaseCommand = (config: CommandConfig) => commands.release(config._commandStorageKey);
 let refreshSubscribers: Array<{ resolve: (token: string) => void; reject: (error: unknown) => void }> = [];
 
 export const setInMemoryToken = (token: string | null) => {
   inMemoryToken = token;
-  if (!token) pendingCommands.clear();
+  if (!token) setCommandActor(null);
 };
 
 export const getInMemoryToken = (): string | null => {
@@ -60,17 +53,20 @@ apiClient.interceptors.request.use(async (config: InternalAxiosRequestConfig) =>
   }
   if (config.url?.startsWith('/auth/web/') && config.method !== 'get')
     config.headers['X-XSRF-TOKEN'] = await csrfToken();
-  const key = commandKey(config);
-  if (key) config.headers['X-Idempotency-Key'] = key;
+  if (config.method === 'post' && commandPattern.test(config.url || '')) {
+    const command = await commands.acquire(config.url!, config.data);
+    config.headers['X-Idempotency-Key'] = command.key;
+    (config as CommandConfig)._commandStorageKey = command.storageKey;
+  }
   return config;
 });
 
 // Response interceptor: Single-flight refresh token khi nhận 401
 apiClient.interceptors.response.use(
-  (response) => { releaseCommand(response.config); return response; },
+  async (response) => { await releaseCommand(response.config); return response; },
   async (error: AxiosError) => {
     if (error.config && error.response && error.response.status >= 400 && error.response.status < 500 && error.response.status !== 401)
-      releaseCommand(error.config);
+      await releaseCommand(error.config);
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
     if (!originalRequest || error.response?.status !== 401 || originalRequest._retry) {

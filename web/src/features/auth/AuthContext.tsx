@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { apiClient, setInMemoryToken, setOnAuthExpired } from '../../shared/api/client';
+import { apiClient, setCommandActor, setInMemoryToken, setOnAuthExpired } from '../../shared/api/client';
 import { AuthUser } from './types';
 import { useQueryClient } from '@tanstack/react-query';
 
@@ -55,6 +55,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         const response = await restoreWebSession();
         if (isMounted && response.data && response.data.success !== false && response.data.data) {
           const { accessToken, user: loggedInUser } = response.data.data;
+          setCommandActor(loggedInUser.id);
           setInMemoryToken(accessToken);
           setUser(loggedInUser);
           localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(loggedInUser));
@@ -97,6 +98,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const { accessToken, user: loggedInUser } = loginData;
       queryClient.clear();
+      setCommandActor(loggedInUser.id);
       setInMemoryToken(accessToken);
       setUser(loggedInUser);
       localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(loggedInUser));

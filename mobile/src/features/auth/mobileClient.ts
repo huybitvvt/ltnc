@@ -2,6 +2,7 @@ import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import { ApiResponse, LoginResponseData } from './types';
+import { createPendingCommands } from '../../shared/pendingCommands';
 
 // Android Emulator thường truy cập localhost của máy host qua 10.0.2.2
 const DEFAULT_URL = Platform.OS === 'android' ? 'http://10.0.2.2:8080/api/v1' : 'http://localhost:8080/api/v1';
@@ -12,20 +13,15 @@ let browserRefreshToken: string | null = null;
 
 let inMemoryAccessToken: string | null = null;
 let isRefreshing = false;
-let commandCounter = 0;
-const pendingCommands = new Map<string, string>();
+const commands = createPendingCommands({
+  get: key => Platform.OS === 'web' ? localStorage.getItem(key) : SecureStore.getItemAsync(key),
+  set: (key, value) => Platform.OS === 'web' ? localStorage.setItem(key, value) : SecureStore.setItemAsync(key, value),
+  remove: key => Platform.OS === 'web' ? localStorage.removeItem(key) : SecureStore.deleteItemAsync(key),
+});
+export const setMobileCommandActor = (id: string | null) => commands.setActor(id);
+type CommandConfig = InternalAxiosRequestConfig & { _commandStorageKey?: string };
 const commandPattern = /\/(payments|deposits)\/|\/invoices\/[^/]+\/(issue|adjust)$|\/contracts\/[^/]+\/checkout$/;
-function commandKey(config: InternalAxiosRequestConfig): string | undefined {
-  if (config.method !== 'post' || !commandPattern.test(config.url || '')) return;
-  const fingerprint = (config.url || '') + ':' + (typeof config.data === 'string' ? config.data : JSON.stringify(config.data ?? {}));
-  let key = pendingCommands.get(fingerprint);
-  if (!key) { key = 'cmd-' + Date.now() + '-' + (++commandCounter) + '-' + Math.random().toString(36).slice(2); pendingCommands.set(fingerprint, key); }
-  return key;
-}
-function releaseCommand(config: InternalAxiosRequestConfig) {
-  const fingerprint = (config.url || '') + ':' + (typeof config.data === 'string' ? config.data : JSON.stringify(config.data ?? {}));
-  pendingCommands.delete(fingerprint);
-}
+const releaseCommand = (config: CommandConfig) => commands.release(config._commandStorageKey);
 let refreshSubscribers: Array<{ resolve: (token: string) => void; reject: (error: unknown) => void }> = [];
 let onAuthExpiredHandler: (() => void) | null = null;
 
@@ -70,7 +66,7 @@ export const storageHelper = {
 
 export const setMobileAccessToken = (token: string | null) => {
   inMemoryAccessToken = token;
-  if (!token) pendingCommands.clear();
+  if (!token) setMobileCommandActor(null);
 };
 
 export const getMobileAccessToken = (): string | null => {
@@ -90,21 +86,24 @@ export const mobileApiClient = axios.create({
 });
 
 // Gắn Access Token in-memory
-mobileApiClient.interceptors.request.use((config: InternalAxiosRequestConfig) => {
+mobileApiClient.interceptors.request.use(async (config: InternalAxiosRequestConfig) => {
   if (inMemoryAccessToken && !config.headers.Authorization) {
     config.headers.Authorization = `Bearer ${inMemoryAccessToken}`;
   }
-  const key = commandKey(config);
-  if (key) config.headers['X-Idempotency-Key'] = key;
+  if (config.method === 'post' && commandPattern.test(config.url || '')) {
+    const command = await commands.acquire(config.url!, config.data);
+    config.headers['X-Idempotency-Key'] = command.key;
+    (config as CommandConfig)._commandStorageKey = command.storageKey;
+  }
   return config;
 });
 
 // Single-flight refresh token khi nhận 401
 mobileApiClient.interceptors.response.use(
-  (response) => { releaseCommand(response.config); return response; },
+  async (response) => { await releaseCommand(response.config); return response; },
   async (error: AxiosError) => {
     if (error.config && error.response && error.response.status >= 400 && error.response.status < 500 && error.response.status !== 401)
-      releaseCommand(error.config);
+      await releaseCommand(error.config);
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
     if (!originalRequest || error.response?.status !== 401 || originalRequest._retry) {

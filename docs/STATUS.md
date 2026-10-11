@@ -2,6 +2,15 @@
 
 Checkpoint: **11/10/2026 — IN_PROGRESS**. Repository public: https://github.com/huybitvvt/ltnc.
 
+## Tiến độ phiên làm việc hiện tại
+
+- Backend: **116 tests, 0 failures/errors/skipped**, gồm 10 test PostgreSQL thực tế: activation đồng thời chỉ 1 hợp đồng ACTIVE, đủ chỉ số bàn giao, checkout lặp trả cùng snapshot; JAR package PASS.
+- Web & Mobile typecheck PASS; **9 web tests, 5 mobile tests**, production web build PASS. Đã lưu idempotency key theo actor qua reload/restart, form hóa đơn cuối sau checkout, OWNER-only sửa tòa, và chặn phương thức thu/hoàn cọc ngoài CASH/BANK_TRANSFER.
+- Browser E2E: **5/5 PASS** (bao gồm gửi lại thu tiền sau reload và luồng checkout retry + phát hành hóa đơn cuối trước đối chiếu cọc).
+- Backup & Restore: `scripts/backup_restore.py` và `docs/BACKUP_RESTORE.md` đã chạy nghiệm thu thực tế thành công qua `.tools/check-backup.py` (kiểm tra dump/restore database, checksum ảnh mã hóa, đối chiếu tổng ledger, từ chối ghi đè database/storage không rỗng, và kiểm thử HTTP sau restore).
+- Cấu hình Vercel: đã bổ sung `web/vercel.json` hỗ trợ rewrite SPA cho web client.
+- Android APK: tiếp tục hoãn (DEFERRED) theo chỉ đạo của chủ dự án; các kiểm tra code và typecheck/jest của mobile vẫn chạy đầy đủ.
+
 Source backend, web và mobile đã có. [IMPLEMENTATION_REVIEW.md](IMPLEMENTATION_REVIEW.md) ghi kết quả trước đợt sửa này; không dùng unit test hoặc typecheck để kết luận đủ capability trên thiết bị.
 
 ## Các phần đã sửa

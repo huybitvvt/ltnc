@@ -223,4 +223,10 @@ class PropertyServiceTest {
         assertThrows(AccessDeniedException.class, () -> propertyService.createFloor(UUID.randomUUID(), new FloorRequest("1", 1), staffPrincipal));
         verify(floorRepository, never()).save(any());
     }
+
+    @Test
+    void staffCannotEditBuilding() {
+        assertThrows(AccessDeniedException.class, () -> propertyService.updateBuilding(UUID.randomUUID(), new BuildingRequest("A", "B"), staffPrincipal));
+        verify(buildingRepository, never()).save(any());
+    }
 }

@@ -24,6 +24,7 @@ mobile/.expo/
 infra/uploads/
 infra/*pgdata/
 uploads/
+backups/
 .tools/
 mobile/android/.gradle/
 mobile/android/app/build/

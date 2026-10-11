@@ -94,6 +94,7 @@ public class PropertyService {
 
     @Transactional
     public BuildingResponse updateBuilding(UUID buildingId, BuildingRequest request, UserPrincipal principal) {
+        if (!principal.isOwner()) throw new AccessDeniedException("Chỉ OWNER sửa tòa nhà");
         checkBuildingAccess(buildingId, principal);
         Building building = getBuildingById(buildingId, principal);
 

@@ -52,6 +52,7 @@ import {
   PaymentMethod,
 } from '../deposits/types';
 import { invoicesApi } from '../invoices/invoicesApi';
+import { FinalInvoiceDialog } from './FinalInvoiceDialog';
 
 export const ContractsPage: React.FC = () => {
   const { user } = useAuth();
@@ -145,6 +146,7 @@ export const ContractsPage: React.FC = () => {
 
   // Trả phòng & Bàn giao (Checkout Wizard)
   const [checkoutOpen, setCheckoutOpen] = useState(false);
+  const [finalContract, setFinalContract] = useState<ContractSummary | null>(null);
   const [checkoutDate, setCheckoutDate] = useState<string>(todayInVietnam());
   const [checkoutElec, setCheckoutElec] = useState<string>('0.000');
   const [checkoutWater, setCheckoutWater] = useState<string>('0.000');
@@ -613,9 +615,10 @@ export const ContractsPage: React.FC = () => {
       setActiveContract(updated);
       setSuccess('Trả phòng thành công! Phòng đã được giải phóng (VACANT), hợp đồng chuyển sang ĐÃ KẾT THÚC (ENDED), cọc chuyển sang chờ quyết toán (SETTLING).');
       setCheckoutOpen(false);
+      setFinalContract(updated);
       await loadData();
       await loadDepositData(activeContract.id);
-      setDetailTab(1); // Chuyển sang tab Sổ cọc để quyết toán
+      setDetailTab(2); // Chuyển sang tab Sổ cọc để quyết toán (Tab index 2)
     } catch (err: any) {
       alert(err.response?.data?.message || err.message || 'Lỗi khi thực hiện trả phòng');
     } finally {
@@ -797,6 +800,8 @@ export const ContractsPage: React.FC = () => {
       </Card>
 
       {/* Modal Lập Hợp Đồng Mới */}
+      <FinalInvoiceDialog contract={finalContract} onClose={() => setFinalContract(null)}
+        onDeposit={() => { setFinalContract(null); setDetailTab(2); }} />
       <Dialog open={createOpen} onClose={() => setCreateOpen(false)} maxWidth="md" fullWidth PaperProps={{ sx: { borderRadius: 3 } }}>
         <DialogTitle sx={{ fontWeight: 700, pb: 1 }}>Lập Bản Nháp Hợp Đồng Thuê Mới</DialogTitle>
         <DialogContent dividers>
@@ -1026,6 +1031,7 @@ export const ContractsPage: React.FC = () => {
                   >
                     Cấp Mã Mời Tài Khoản
                   </Button>
+                  {activeContract.status === 'ENDED' && <Button variant="outlined" onClick={() => setFinalContract(activeContract)}>Hóa đơn cuối</Button>}
                   <Button
                     variant="outlined"
                     startIcon={<PeopleIcon />}
@@ -1716,7 +1722,7 @@ export const ContractsPage: React.FC = () => {
               <TextField
                 fullWidth
                 type="date"
-                label="Ngày trả phòng thực tế (Không tính tiền ngày này - BR-036) *"
+                label="Ngày trả phòng thực tế (Không tính tiền ngày này - BR-036)"
                 InputLabelProps={{ shrink: true }}
                 required
                 value={checkoutDate}
@@ -1728,7 +1734,7 @@ export const ContractsPage: React.FC = () => {
               <TextField
                 fullWidth
                 type="number"
-                label="Chỉ số Điện chốt trả phòng (kWh) *"
+                label="Chỉ số Điện chốt trả phòng (kWh)"
                 required
                 value={checkoutElec}
                 onChange={(e) => setCheckoutElec(e.target.value)}
@@ -1738,7 +1744,7 @@ export const ContractsPage: React.FC = () => {
               <TextField
                 fullWidth
                 type="number"
-                label="Chỉ số Nước chốt trả phòng (m³) *"
+                label="Chỉ số Nước chốt trả phòng (m³)"
                 required
                 value={checkoutWater}
                 onChange={(e) => setCheckoutWater(e.target.value)}

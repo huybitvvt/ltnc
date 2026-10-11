@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useCallback, Pro
 import {
   mobileApiClient,
   setMobileAccessToken,
+  setMobileCommandActor,
   setOnMobileAuthExpired,
   storageHelper,
 } from './mobileClient';
@@ -55,6 +56,7 @@ export const AuthProvider: React.FC<PropsWithChildren> = ({ children }) => {
 
         if (isMounted && response.data.success) {
           const { accessToken, refreshToken: newRefreshToken, user: loggedInUser } = response.data.data;
+          setMobileCommandActor(loggedInUser.id);
           setMobileAccessToken(accessToken);
           setUser(loggedInUser);
           if (newRefreshToken) {
@@ -97,6 +99,8 @@ export const AuthProvider: React.FC<PropsWithChildren> = ({ children }) => {
       }
 
       const { accessToken, refreshToken, user: loggedInUser } = loginData;
+      queryClient.clear();
+      setMobileCommandActor(loggedInUser.id);
       setMobileAccessToken(accessToken);
       setUser(loggedInUser);
 

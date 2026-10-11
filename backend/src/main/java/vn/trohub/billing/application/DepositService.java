@@ -89,6 +89,7 @@ public class DepositService {
                                                                        UserPrincipal principal,
                                                                        String idempotencyKey) {
         if (principal.isTenant()) throw new AccessDeniedException("Chỉ quản lý được ghi giao dịch cọc");
+        requireManualMethod(request.paymentMethod());
         if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 100)
             throw new IllegalArgumentException("X-Idempotency-Key bắt buộc");
         operationRepository.lockKey(principal.getId() + ":" + idempotencyKey);
@@ -224,6 +225,7 @@ public class DepositService {
                                                                 UserPrincipal principal,
                                                                 String idempotencyKey) {
         if (principal.isTenant()) throw new AccessDeniedException("Chỉ quản lý được ghi giao dịch cọc");
+        requireManualMethod(request.paymentMethod());
         if (idempotencyKey == null || idempotencyKey.isBlank() || idempotencyKey.length() > 100)
             throw new IllegalArgumentException("X-Idempotency-Key bắt buộc");
         operationRepository.lockKey(principal.getId() + ":" + idempotencyKey);
@@ -557,6 +559,11 @@ public class DepositService {
         BigDecimal originalTotal = invoice.getOriginalTotal();
         BigDecimal adjustmentsTotal = adjustmentRepository.sumDeltaAmountByInvoiceId(invoice.getId());
         return originalTotal.add(adjustmentsTotal).max(BigDecimal.ZERO);
+    }
+
+    private void requireManualMethod(PaymentMethod method) {
+        if (method != null && method != PaymentMethod.CASH && method != PaymentMethod.BANK_TRANSFER)
+            throw new IllegalArgumentException("Chỉ tiền mặt hoặc chuyển khoản thủ công");
     }
 
     private void validateManagerOnly(UUID buildingId, User user) {

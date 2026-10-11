@@ -1,10 +1,16 @@
 import axios, { AxiosError, AxiosHeaders, InternalAxiosRequestConfig } from 'axios';
-import { afterEach, expect, test, vi } from 'vitest';
-import { apiClient, setInMemoryToken } from './client';
+import { afterEach, beforeEach, expect, test, vi } from 'vitest';
+import { apiClient, setCommandActor, setInMemoryToken } from './client';
 
-afterEach(() => { vi.restoreAllMocks(); setInMemoryToken(null); });
+beforeEach(() => {
+  const data = new Map<string, string>();
+  vi.stubGlobal('localStorage', { getItem: (key: string) => data.get(key) || null,
+    setItem: (key: string, value: string) => { data.set(key, value); }, removeItem: (key: string) => { data.delete(key); } });
+});
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); setInMemoryToken(null); });
 
 test('a financial retry keeps its key after a lost response', async () => {
+  setCommandActor('test-actor');
   const keys: string[] = [];
   apiClient.defaults.adapter = async config => {
     keys.push(String(config.headers['X-Idempotency-Key']));

@@ -29,6 +29,8 @@ class PostgreSQLFinanceIntegrationTest {
     @Autowired PaymentService payments;
     @Autowired MockMvc http;
     @Autowired vn.trohub.operations.application.FinancialReportService reports;
+    @Autowired vn.trohub.tenancy.application.CheckoutService checkouts;
+    @Autowired vn.trohub.tenancy.application.TenancyService tenancy;
     UUID actor, tenantActor, building, room, contract, invoice;
     UserPrincipal owner, tenant;
 
@@ -145,6 +147,49 @@ class PostgreSQLFinanceIntegrationTest {
         http.perform(get("/api/v1/tenants/"+profile).with(user(manager))).andExpect(status().isOk());
         jdbc.update("DELETE FROM building_staff_assignments WHERE user_id=?", staff);
         http.perform(get("/api/v1/tenants/"+profile).with(user(manager))).andExpect(status().isForbidden());
+    }
+
+    @Test void concurrentActivationHasOneWinnerAndTwoHandoverReadings() throws Exception {
+        UUID profile = jdbc.queryForObject("SELECT representative_tenant_id FROM contracts WHERE id=?", UUID.class, contract);
+        jdbc.update("UPDATE contracts SET status='DRAFT' WHERE id=?", contract);
+        UUID other = UUID.randomUUID();
+        jdbc.update("INSERT INTO contracts (id,room_id,representative_tenant_id,status,actual_start_date,planned_end_exclusive,rent,deposit_required) VALUES (?,?,?,'DRAFT','2026-09-01','2027-09-01',3000000,3000000)", other, room, profile);
+        for (UUID id : List.of(contract, other))
+            jdbc.update("INSERT INTO contract_members (contract_id,tenant_id,joined_on,is_representative) VALUES (?,?,'2026-09-01',true)", id, profile);
+        var readings = new vn.trohub.tenancy.api.dto.TenancyDtos.ActivateContractRequest(List.of(
+                new vn.trohub.tenancy.api.dto.TenancyDtos.HandoverReadingItem(null, vn.trohub.tenancy.domain.MeterType.ELECTRICITY, java.time.LocalDate.of(2026,9,1), BigDecimal.ZERO),
+                new vn.trohub.tenancy.api.dto.TenancyDtos.HandoverReadingItem(null, vn.trohub.tenancy.domain.MeterType.WATER, java.time.LocalDate.of(2026,9,1), BigDecimal.ZERO)));
+        var index = new java.util.concurrent.atomic.AtomicInteger();
+        var results = concurrently(() -> {
+            UUID id = index.getAndIncrement() == 0 ? contract : other;
+            try { tenancy.activateContract(id, readings, owner); return true; }
+            catch (IllegalStateException expected) { return false; }
+        });
+        assertEquals(1, results.stream().filter(Boolean::booleanValue).count());
+        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM contracts WHERE room_id=? AND status='ACTIVE'", Integer.class, room));
+        assertEquals(2, jdbc.queryForObject("SELECT count(*) FROM meter_readings mr JOIN room_meters rm ON rm.id=mr.meter_id WHERE rm.room_id=?", Integer.class, room));
+        assertEquals("RENTED", jdbc.queryForObject("SELECT status FROM rooms WHERE id=?", String.class, room));
+    }
+
+    @Test void checkoutRetryIsAtomicAndRequiresSamePayloadAndScope() throws Exception {
+        java.time.LocalDate date = java.time.LocalDate.of(2026,10,10);
+        UUID electric = UUID.randomUUID(), water = UUID.randomUUID();
+        jdbc.update("INSERT INTO room_meters (id,room_id,type,serial,installed_on,initial_reading) VALUES (?,?,'ELECTRICITY','IT-E','2026-09-01',0),(?,?,'WATER','IT-W','2026-09-01',0)", electric, room, water, room);
+        var request = new vn.trohub.tenancy.api.dto.TenancyDtos.CheckoutContractRequest(date, List.of(
+                new vn.trohub.tenancy.api.dto.TenancyDtos.HandoverReadingItem(electric,vn.trohub.tenancy.domain.MeterType.ELECTRICITY,date,BigDecimal.TEN),
+                new vn.trohub.tenancy.api.dto.TenancyDtos.HandoverReadingItem(water,vn.trohub.tenancy.domain.MeterType.WATER,date,BigDecimal.ONE)));
+        var results = concurrently(() -> checkouts.checkout(contract, request, owner, "checkout-retry"));
+        assertEquals(results.get(0), results.get(1));
+        assertEquals(2, jdbc.queryForObject("SELECT count(*) FROM meter_readings WHERE meter_id IN (?,?)", Integer.class, electric, water));
+        assertEquals(1, jdbc.queryForObject("SELECT count(*) FROM contract_events WHERE contract_id=? AND type='CHECKOUT'", Integer.class, contract));
+        assertEquals("ENDED", results.get(0).status().name());
+        assertEquals("VACANT", jdbc.queryForObject("SELECT status FROM rooms WHERE id=?", String.class, room));
+        assertThrows(ConflictException.class, () -> checkouts.checkout(contract,
+                new vn.trohub.tenancy.api.dto.TenancyDtos.CheckoutContractRequest(date.minusDays(1), request.finalReadings()), owner, "checkout-retry"));
+        assertThrows(org.springframework.security.access.AccessDeniedException.class, () -> checkouts.checkout(contract,request,tenant,"checkout-retry"));
+        http.perform(post("/api/v1/contracts/"+contract+"/checkout").with(user(owner)).contentType("application/json")
+                .content("{\"actualCheckoutDate\":\"2026-10-10\",\"finalReadings\":[]}"))
+                .andExpect(status().isBadRequest());
     }
 
     private <T> List<T> concurrently(Callable<T> command) throws Exception {

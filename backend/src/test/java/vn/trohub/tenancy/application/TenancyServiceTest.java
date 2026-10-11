@@ -71,12 +71,14 @@ class TenancyServiceTest {
 
     @BeforeEach
     void setUp() {
+        tenancyService.setClock(java.time.Clock.fixed(java.time.Instant.parse("2026-10-11T00:00:00Z"), java.time.ZoneId.of("Asia/Ho_Chi_Minh")));
         testBuilding = new Building("Tòa nhà Cầu Giấy", "Số 12 Dịch Vọng Hậu");
         testRoom = new Room(testBuilding, null, "P101", new BigDecimal("3500000"), new BigDecimal("3500000"));
         testRoom.setId(UUID.randomUUID());
         testRoom.setMaxTenants(2);
 
         testTenant = new TenantProfile("Nguyễn Văn An", "0912345678", "********1234", "an@example.com");
+        testTenant.setId(UUID.randomUUID());
 
         managerUser = new User("admin", "hashed_pwd", UserRole.OWNER);
         ownerPrincipal = new UserPrincipal(managerUser.getId(), "admin", UserRole.OWNER, true);
@@ -165,7 +167,11 @@ class TenancyServiceTest {
                 new HandoverReadingItem(null, MeterType.WATER, LocalDate.of(2026, 10, 1), new BigDecimal("15.000"))
         ));
 
-        when(contractRepository.findById(contract.getId())).thenReturn(Optional.of(contract));
+        testTenant.setUser(new User("activated_tenant", "hash", UserRole.TENANT));
+        when(contractRepository.findForUpdate(contract.getId())).thenReturn(Optional.of(contract));
+        when(roomRepository.findForUpdate(testRoom.getId())).thenReturn(Optional.of(testRoom));
+        when(contractMemberRepository.findByContractIdOrderByJoinedOnAsc(contract.getId()))
+                .thenReturn(List.of(new ContractMember(contract, testTenant, contract.getActualStartDate(), true)));
         when(contractRepository.existsByRoomIdAndStatus(testRoom.getId(), ContractStatus.ACTIVE)).thenReturn(false);
         when(userRepository.findById(ownerPrincipal.getId())).thenReturn(Optional.of(managerUser));
         when(roomMeterRepository.findByRoomIdAndType(eq(testRoom.getId()), any(MeterType.class)))
@@ -187,7 +193,8 @@ class TenancyServiceTest {
         Contract contract = new Contract(testRoom, testTenant, LocalDate.of(2026, 10, 1),
                 LocalDate.of(2027, 4, 1), new BigDecimal("3500000"), new BigDecimal("3500000"));
 
-        when(contractRepository.findById(contract.getId())).thenReturn(Optional.of(contract));
+        when(contractRepository.findForUpdate(contract.getId())).thenReturn(Optional.of(contract));
+        when(roomRepository.findForUpdate(testRoom.getId())).thenReturn(Optional.of(testRoom));
         when(contractRepository.existsByRoomIdAndStatus(testRoom.getId(), ContractStatus.ACTIVE)).thenReturn(true);
 
         ActivateContractRequest request = new ActivateContractRequest(List.of());
@@ -195,6 +202,56 @@ class TenancyServiceTest {
         assertThatThrownBy(() -> tenancyService.activateContract(contract.getId(), request, ownerPrincipal))
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("đã có một hợp đồng ACTIVE");
+    }
+
+    @Test
+    void activationRequiresEnabledTenantAccount() {
+        Contract contract = activationDraft();
+        User pending = new User("pending", "hash", UserRole.TENANT);
+        pending.setEnabled(false);
+        testTenant.setUser(pending);
+        assertThatThrownBy(() -> tenancyService.activateContract(contract.getId(), new ActivateContractRequest(List.of()), ownerPrincipal))
+                .isInstanceOf(IllegalStateException.class).hasMessageContaining("kích hoạt tài khoản");
+        verifyNoInteractions(meterReadingRepository);
+    }
+
+    @Test
+    void activationRequiresBothMetersBeforeWritingReadings() {
+        Contract contract = activationDraft();
+        testTenant.setUser(new User("active", "hash", UserRole.TENANT));
+        when(contractMemberRepository.findByContractIdOrderByJoinedOnAsc(contract.getId()))
+                .thenReturn(List.of(new ContractMember(contract, testTenant, contract.getActualStartDate(), true)));
+        assertThatThrownBy(() -> tenancyService.activateContract(contract.getId(), new ActivateContractRequest(List.of(
+                new HandoverReadingItem(null, MeterType.ELECTRICITY, contract.getActualStartDate(), BigDecimal.ZERO))), ownerPrincipal))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("điện và nước");
+        verifyNoInteractions(meterReadingRepository);
+    }
+
+    @Test
+    void activationRejectsMeterFromOtherRoom() {
+        Contract contract = activationDraft();
+        testTenant.setUser(new User("active", "hash", UserRole.TENANT));
+        when(contractMemberRepository.findByContractIdOrderByJoinedOnAsc(contract.getId()))
+                .thenReturn(List.of(new ContractMember(contract, testTenant, contract.getActualStartDate(), true)));
+        when(userRepository.findById(ownerPrincipal.getId())).thenReturn(Optional.of(managerUser));
+        Room foreignRoom = new Room(testBuilding, null, "P999", BigDecimal.ONE, BigDecimal.ONE);
+        foreignRoom.setId(UUID.randomUUID());
+        RoomMeter meter = new RoomMeter(foreignRoom, MeterType.ELECTRICITY, "OTHER", contract.getActualStartDate(), BigDecimal.ZERO);
+        meter.setId(UUID.randomUUID());
+        when(roomMeterRepository.findById(meter.getId())).thenReturn(Optional.of(meter));
+        assertThatThrownBy(() -> tenancyService.activateContract(contract.getId(), new ActivateContractRequest(List.of(
+                new HandoverReadingItem(meter.getId(), MeterType.ELECTRICITY, contract.getActualStartDate(), BigDecimal.ONE),
+                new HandoverReadingItem(null, MeterType.WATER, contract.getActualStartDate(), BigDecimal.ZERO))), ownerPrincipal))
+                .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("không thuộc phòng");
+        verify(meterReadingRepository, never()).save(any());
+    }
+
+    private Contract activationDraft() {
+        Contract contract = new Contract(testRoom, testTenant, LocalDate.of(2026, 10, 1), LocalDate.of(2027, 4, 1),
+                new BigDecimal("3500000"), new BigDecimal("3500000"));
+        when(contractRepository.findForUpdate(contract.getId())).thenReturn(Optional.of(contract));
+        when(roomRepository.findForUpdate(testRoom.getId())).thenReturn(Optional.of(testRoom));
+        return contract;
     }
 
     @Test

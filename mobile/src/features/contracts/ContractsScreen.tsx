@@ -25,6 +25,7 @@ import {
 } from '../deposits/types';
 import { mobileDepositsApi } from '../deposits/depositsApi';
 import { useMobileAuth } from '../auth/AuthContext';
+import { FinalInvoiceDialog } from './FinalInvoiceDialog';
 
 interface ContractsScreenProps {
   onBack: () => void;
@@ -100,6 +101,7 @@ export const ContractsScreen: React.FC<ContractsScreenProps> = ({ onBack }) => {
 
   // Trả phòng (Checkout Wizard)
   const [checkoutContract, setCheckoutContract] = useState<ContractSummary | null>(null);
+  const [finalContract, setFinalContract] = useState<ContractSummary | null>(null);
   const [checkoutDate, setCheckoutDate] = useState(todayInVietnam());
   const [checkoutElec, setCheckoutElec] = useState('0.000');
   const [checkoutWater, setCheckoutWater] = useState('0.000');
@@ -415,14 +417,13 @@ export const ContractsScreen: React.FC<ContractsScreenProps> = ({ onBack }) => {
           value: checkoutWater || '0.000',
         },
       ];
-      await mobileApiClient.post(`/contracts/${checkoutContract.id}/checkout`, {
+      const response = await mobileApiClient.post<ApiResponse<ContractSummary>>(`/contracts/${checkoutContract.id}/checkout`, {
         actualCheckoutDate: checkoutDate,
         finalReadings: readings,
       });
       queryClient.invalidateQueries({ queryKey: ['mobileContracts'] });
-      const target = checkoutContract;
       setCheckoutContract(null);
-      handleOpenDeposit(target);
+      setFinalContract(response.data.data);
     } catch (err: any) {
       setCheckoutError(err.response?.data?.message || err.message || 'Lỗi khi trả phòng');
     } finally {
@@ -620,6 +621,8 @@ export const ContractsScreen: React.FC<ContractsScreenProps> = ({ onBack }) => {
                     </Button>
                   )}
 
+                  {isManager && c.status === 'ENDED' && <Button compact mode="outlined" onPress={() => setFinalContract(c)}>Hóa đơn cuối</Button>}
+
                   {isManager && isActive && (
                     <>
                       <Button
@@ -661,6 +664,8 @@ export const ContractsScreen: React.FC<ContractsScreenProps> = ({ onBack }) => {
 
       {/* Modal Chi tiết & Thành viên */}
       <Portal>
+        <FinalInvoiceDialog contract={finalContract} onClose={() => setFinalContract(null)}
+          onDeposit={() => { const target = finalContract; setFinalContract(null); if (target) handleOpenDeposit(target); }} />
         <Dialog visible={!!detailContract} onDismiss={() => setDetailContract(null)} style={styles.dialog}>
           <Dialog.Title>Chi tiết hợp đồng</Dialog.Title>
           <Dialog.Content>

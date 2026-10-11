@@ -68,7 +68,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiError> handleIllegalStateException(IllegalStateException ex) {
         String traceId = UUID.randomUUID().toString();
         ApiError error = ApiError.of("INVALID_STATE", ex.getMessage(), traceId);
-        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+        return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
+
+    @ExceptionHandler({org.springframework.web.bind.MissingRequestHeaderException.class,
+            org.springframework.http.converter.HttpMessageNotReadableException.class})
+    public ResponseEntity<ApiError> handleMalformedRequest(Exception ex) {
+        return ResponseEntity.badRequest().body(ApiError.of("BAD_REQUEST", "Thiếu header hoặc nội dung yêu cầu không hợp lệ", UUID.randomUUID().toString()));
     }
 
     @ExceptionHandler(ConflictException.class)

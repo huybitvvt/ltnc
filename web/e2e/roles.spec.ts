@@ -83,7 +83,7 @@ test('TENANT sees own issued invoice and cannot open owner user management',asyn
   expect(forbidden.status()).toBe(403);
 });
 
-test('a lost payment response can be retried from the form without another receipt',async({page})=>{
+test('a lost payment response can be retried after reload without another receipt',async({page})=>{
   await login(page,ownerLogin!,ownerPassword!);
   await page.goto('/invoices');
   await page.getByLabel('Kỳ tính tiền (YYYY-MM)',{exact:true}).fill(start.slice(0,7));
@@ -102,6 +102,10 @@ test('a lost payment response can be retried from the form without another recei
   await submit.click();
   await expect.poll(()=>requests).toBe(1);
   await expect(submit).toBeEnabled();
+  await page.reload();
+  await page.getByLabel('Kỳ tính tiền (YYYY-MM)',{exact:true}).fill(start.slice(0,7));
+  await row.getByRole('button',{name:'Thu tiền nhanh'}).click();
+  await page.getByLabel('Số tiền thu (VND) *',{exact:true}).fill('1000000');
   await submit.click();
   await expect(page.getByRole('dialog')).toHaveCount(0);
   expect(keys).toHaveLength(2);
@@ -111,4 +115,39 @@ test('a lost payment response can be retried from the form without another recei
   const status=(await response.json()).data;
   expect(status.netApplied).toBe('1000000');
   expect(status.entries.filter((entry:any)=>entry.entryType==='PAYMENT')).toHaveLength(1);
+});
+
+test('checkout retries once and opens the final invoice before deposit reconciliation',async({page})=>{
+  await login(page,ownerLogin!,ownerPassword!);
+  await page.goto('/contracts');
+  const row=page.getByRole('row').filter({hasText:building.name});
+  await row.getByRole('button',{name:'Chi tiết & Sổ cọc'}).click();
+  await page.getByRole('button',{name:'Trả Phòng & Kiểm Kê (Checkout)',exact:true}).click();
+  const checkoutDate=new Date(Date.now()+7*60*60*1000).toISOString().slice(0,10);
+  await page.getByLabel('Ngày trả phòng thực tế (Không tính tiền ngày này - BR-036) *',{exact:true}).fill(checkoutDate);
+  await page.getByLabel('Chỉ số Điện chốt trả phòng (kWh) *',{exact:true}).fill('10');
+  await page.getByLabel('Chỉ số Nước chốt trả phòng (m³) *',{exact:true}).fill('1');
+  let requests=0; const keys:string[]=[];
+  await page.route(`**/api/v1/contracts/${contract.id}/checkout`,async route=>{
+    keys.push(route.request().headers()['x-idempotency-key']);
+    if(requests++===0){const response=await route.fetch();expect(response.ok()).toBeTruthy();await route.abort('failed');}
+    else await route.continue();
+  });
+  page.on('dialog',dialog=>dialog.dismiss());
+  const submit=page.getByRole('button',{name:'Xác Nhận Trả Phòng',exact:true});
+  await submit.click(); await expect.poll(()=>requests).toBe(1); await expect(submit).toBeEnabled(); await submit.click();
+  const final=page.getByRole('dialog').filter({hasText:'Bước 2/3: Hóa đơn cuối'});
+  await expect(final).toBeVisible(); expect(keys[0]).toBe(keys[1]);
+  await final.getByRole('button',{name:'Xem trước hóa đơn cuối',exact:true}).click();
+  await expect(final.getByText('Bản nháp',{exact:false})).toBeVisible();
+  await final.getByRole('button',{name:'Phát hành hóa đơn cuối',exact:true}).click();
+  await expect(final.getByText('Đã phát hành',{exact:false})).toBeVisible();
+  const list=await owner.get(api+'/invoices',{params:{contractId:contract.id,billingMonth:checkoutDate.slice(0,7)}});
+  expect(list.ok()).toBeTruthy(); const issued=(await list.json()).data.content;
+  expect(issued).toHaveLength(1); expect(issued[0].status).toBe('ISSUED');
+  const detail=await owner.get(api+`/invoices/${issued[0].id}`);
+  expect((await detail.json()).data.periodEndExclusive).toBe(checkoutDate);
+  await final.getByRole('button',{name:'Bước 3: Đối chiếu cọc',exact:true}).click();
+  await expect(final).toHaveCount(0);
+  await expect(page.getByRole('tab',{name:/Quản lý Cọc & Quyết Toán/})).toHaveAttribute('aria-selected','true');
 });

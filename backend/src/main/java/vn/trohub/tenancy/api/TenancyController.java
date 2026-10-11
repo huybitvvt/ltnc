@@ -22,9 +22,11 @@ import java.util.UUID;
 public class TenancyController {
 
     private final TenancyService tenancyService;
+    private final vn.trohub.tenancy.application.CheckoutService checkoutService;
 
-    public TenancyController(TenancyService tenancyService) {
+    public TenancyController(TenancyService tenancyService, vn.trohub.tenancy.application.CheckoutService checkoutService) {
         this.tenancyService = tenancyService;
+        this.checkoutService = checkoutService;
     }
 
     // ==========================================
@@ -118,8 +120,9 @@ public class TenancyController {
     public ResponseEntity<ApiResponse<ContractSummary>> checkoutContract(
             @PathVariable UUID id,
             @Valid @RequestBody CheckoutContractRequest request,
+            @RequestHeader("X-Idempotency-Key") String idempotencyKey,
             @AuthenticationPrincipal UserPrincipal actor) {
-        ContractSummary summary = tenancyService.checkoutContract(id, request, actor);
+        ContractSummary summary = checkoutService.checkout(id, request, actor, idempotencyKey);
         return ResponseEntity.ok(ApiResponse.of(summary));
     }
 

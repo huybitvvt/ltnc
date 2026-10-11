@@ -58,12 +58,14 @@ public class TenancyDtos {
             LocalDate plannedEndExclusive,
 
             @NotNull(message = "Giá thuê không được để trống")
+            @jakarta.validation.constraints.DecimalMin("0")
             @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
             @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
             @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
             BigDecimal rent,
 
             @NotNull(message = "Tiền cọc không được để trống")
+            @jakarta.validation.constraints.DecimalMin("0")
             @jakarta.validation.constraints.Digits(integer = 19, fraction = 0)
             @io.swagger.v3.oas.annotations.media.Schema(type = "string", pattern = "^-?[0-9]{1,19}$", example = "3000000")
             @com.fasterxml.jackson.databind.annotation.JsonSerialize(using = com.fasterxml.jackson.databind.ser.std.ToStringSerializer.class)
@@ -93,12 +95,14 @@ public class TenancyDtos {
             @NotNull
             LocalDate readingDate,
             @NotNull
+            @jakarta.validation.constraints.DecimalMin("0")
+            @jakarta.validation.constraints.Digits(integer = 15, fraction = 3)
             BigDecimal value
     ) {}
 
     public record ActivateContractRequest(
             @NotNull
-            List<HandoverReadingItem> handoverReadings
+            List<@jakarta.validation.Valid HandoverReadingItem> handoverReadings
     ) {}
 
     public record ExtendContractRequest(
@@ -113,7 +117,7 @@ public class TenancyDtos {
             @NotNull(message = "Ngày trả phòng không được để trống")
             LocalDate actualCheckoutDate,
 
-            List<HandoverReadingItem> finalReadings
+            List<@jakarta.validation.Valid HandoverReadingItem> finalReadings
     ) {}
 
     // --- Contract Member DTOs ---

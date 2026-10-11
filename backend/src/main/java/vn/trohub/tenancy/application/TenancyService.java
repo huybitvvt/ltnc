@@ -160,6 +160,10 @@ public class TenancyService {
         if (!request.actualStartDate().isBefore(request.plannedEndExclusive())) {
             throw new IllegalArgumentException("Ngày kết thúc dự kiến phải sau ngày bắt đầu ít nhất 1 ngày (BR-037)");
         }
+        vn.trohub.common.money.Money.requireWhole(request.rent());
+        vn.trohub.common.money.Money.requireWhole(request.depositRequired());
+        if (request.rent().signum() < 0 || request.depositRequired().signum() < 0)
+            throw new IllegalArgumentException("Giá thuê và cọc không được âm");
 
         TenantProfile representative = tenantProfileRepository.findById(request.representativeTenantId())
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy người đại diện: " + request.representativeTenantId()));
@@ -196,17 +200,18 @@ public class TenancyService {
     public ContractSummary activateContract(UUID contractId, ActivateContractRequest request, UserPrincipal actor) {
         verifyManagerRole(actor);
 
-        Contract contract = contractRepository.findById(contractId)
+        Contract contract = contractRepository.findForUpdate(contractId)
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy hợp đồng: " + contractId));
 
-        Room room = contract.getRoom();
+        Room room = roomRepository.findForUpdate(contract.getRoom().getId())
+                .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy phòng"));
         checkBuildingScope(room.getBuilding().getId(), actor);
 
         if (contract.getStatus() != ContractStatus.DRAFT) {
             throw new IllegalStateException("Chỉ hợp đồng DRAFT mới có thể kích hoạt");
         }
 
-        if (!room.isBookable()) {
+        if (!room.isBookable() || !room.getBuilding().isActive()) {
             throw new IllegalStateException("Phòng đang bị khóa cho thuê (BR-029)");
         }
 
@@ -214,6 +219,22 @@ public class TenancyService {
         if (contractRepository.existsByRoomIdAndStatus(room.getId(), ContractStatus.ACTIVE)) {
             throw new IllegalStateException("Phòng " + room.getRoomNumber() + " đã có một hợp đồng ACTIVE khác đang chạy (BR-035)");
         }
+
+        User representative = contract.getRepresentativeTenant().getUser();
+        if (representative == null || !representative.isEnabled() || representative.getRole() != UserRole.TENANT)
+            throw new IllegalStateException("Người đại diện phải kích hoạt tài khoản TENANT trước nhận phòng");
+        if (contract.getActualStartDate().isAfter(LocalDate.now(clock)))
+            throw new IllegalArgumentException("Ngày nhận phòng thực tế không được ở tương lai");
+        List<ContractMember> initialMembers = contractMemberRepository.findByContractIdOrderByJoinedOnAsc(contractId).stream()
+                .filter(m -> !m.getJoinedOn().isAfter(contract.getActualStartDate())
+                        && (m.getLeftOn() == null || m.getLeftOn().isAfter(contract.getActualStartDate()))).toList();
+        if (initialMembers.isEmpty() || initialMembers.size() > room.getMaxTenants()
+                || initialMembers.stream().filter(m -> m.isRepresentative()
+                    && java.util.Objects.equals(m.getTenant().getId(), contract.getRepresentativeTenant().getId())).count() != 1)
+            throw new IllegalStateException("Thành viên ban đầu phải có đúng người đại diện và không vượt sức chứa");
+        if (request.handoverReadings() == null || request.handoverReadings().size() != 2)
+            throw new IllegalArgumentException("Nhận phòng cần đủ chỉ số bàn giao điện và nước");
+        java.util.Set<MeterType> suppliedTypes = new java.util.HashSet<>();
 
         User actorUser = userRepository.findById(actor.getId())
                 .orElseThrow(() -> new IllegalArgumentException("Không tìm thấy người dùng hiện tại"));
@@ -241,6 +262,17 @@ public class TenancyService {
                             });
                 }
 
+                if (!meter.getRoom().getId().equals(room.getId()) || !meter.isActive()
+                        || (item.meterType() != null && item.meterType() != meter.getType()))
+                    throw new IllegalArgumentException("Công tơ bàn giao không thuộc phòng hoặc sai loại");
+                if (!contract.getActualStartDate().equals(item.readingDate()) || item.value() == null || item.value().signum() < 0)
+                    throw new IllegalArgumentException("Chỉ số bàn giao phải đúng ngày nhận và không âm");
+                if (!suppliedTypes.add(meter.getType())) throw new IllegalArgumentException("Loại công tơ bàn giao bị trùng");
+                var previous = meterReadingRepository.findByMeterIdAndReadingDateLessThanEqualOrderByReadingDateDescCreatedAtDesc(
+                        meter.getId(), item.readingDate());
+                if (!previous.isEmpty() && item.value().compareTo(previous.get(0).getValue()) < 0)
+                    throw new IllegalArgumentException("Chỉ số bàn giao không được giảm");
+
                 MeterReading reading = new MeterReading(
                         meter,
                         item.readingDate(),
@@ -251,12 +283,14 @@ public class TenancyService {
                 meterReadingRepository.save(reading);
             }
         }
+        if (!suppliedTypes.containsAll(java.util.Set.of(MeterType.ELECTRICITY, MeterType.WATER)))
+            throw new IllegalArgumentException("Nhận phòng cần chỉ số điện và nước");
 
         // Kích hoạt hợp đồng và đổi trạng thái phòng sang RENTED
         contract.setStatus(ContractStatus.ACTIVE);
         room.setStatus(RoomStatus.RENTED);
 
-        contract = contractRepository.save(contract);
+        contractRepository.save(contract);
         roomRepository.save(room);
 
         ContractEvent event = new ContractEvent(

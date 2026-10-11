@@ -13,6 +13,9 @@ import java.util.UUID;
 
 @Repository
 public interface RoomRepository extends JpaRepository<Room, UUID> {
+    @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT r FROM Room r WHERE r.id = :id")
+    Optional<Room> findForUpdate(@Param("id") UUID id);
     List<Room> findByBuildingIdOrderByRoomNumberAsc(UUID buildingId);
     List<Room> findByBuildingIdAndStatusOrderByRoomNumberAsc(UUID buildingId, RoomStatus status);
     List<Room> findByFloorIdOrderByRoomNumberAsc(UUID floorId);

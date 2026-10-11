@@ -65,10 +65,15 @@ public class SecurityConfig {
         return http.build();
     }
 
+    @org.springframework.beans.factory.annotation.Value("${trohub.security.cors.allowed-origins:http://localhost:5173,http://localhost:3000,http://127.0.0.1:*,https://*.vercel.app}")
+    private List<String> allowedOrigins;
+
     @Bean
     public CorsConfigurationSource corsConfigurationSource() {
         CorsConfiguration config = new CorsConfiguration();
-        config.setAllowedOriginPatterns(List.of("http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:*"));
+        config.setAllowedOriginPatterns(allowedOrigins != null && !allowedOrigins.isEmpty() 
+            ? allowedOrigins 
+            : List.of("http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:*", "https://*.vercel.app"));
         config.setAllowedMethods(List.of("GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"));
         config.setAllowedHeaders(List.of("*"));
         config.setExposedHeaders(List.of("Idempotency-Key", "X-Trace-Id"));
