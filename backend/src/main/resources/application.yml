@@ -22,6 +22,6 @@ management:
       show-details: never
 
 server:
-  port: 8080
+  port: ${PORT:8080}
   servlet:
     context-path: /

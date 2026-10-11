@@ -1,0 +1,31 @@
+spring:
+  datasource:
+    url: ${SPRING_DATASOURCE_URL}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+    show-sql: false
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    locations: classpath:db/migration
+
+trohub:
+  auth:
+    secure-cookies: ${TROHUB_AUTH_SECURE_COOKIES:true}
+  jwt:
+    secret: ${JWT_SECRET}
+    access-token-expiration-seconds: 900
+    refresh-token-expiration-days: 7
+  owner-bootstrap:
+    enabled: ${OWNER_BOOTSTRAP_ENABLED:false}
+    login: ${OWNER_BOOTSTRAP_LOGIN:owner}
+    password: ${OWNER_BOOTSTRAP_PASSWORD:}
+  storage:
+    location: ${TROHUB_STORAGE_LOCATION:/app/uploads}
